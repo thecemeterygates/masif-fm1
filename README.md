@@ -2,9 +2,6 @@
 
 **A 4-track sample tracker and rack sampler for the M-VAVE FM-1.** Free firmware, GPL-3.0-only.
 
-You write songs on the FM-1 itself, in rows and columns: a song is a list of chains, a chain a list of phrases, a
-phrase 16 rows of notes and effects. Every sound comes from you. MASIF ships with no sounds. You load samples from
-its web page, or record them on the FM-1 (from the computer over USB, or a bounce of your own song).
 
 - **Web page (sampler, sync, guide):** https://thecemeterygates.github.io/masif-fm1/
 - **Download:** [Releases](https://github.com/thecemeterygates/masif-fm1/releases): the firmware package and the installer
