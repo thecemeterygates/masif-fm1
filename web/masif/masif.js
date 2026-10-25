@@ -6,6 +6,7 @@
 "use strict";
 (() => {
   const Z = window.ZP12Link, M = window.MasifDSP;
+  const VQ = new URL(document.currentScript.src).search;   // (this page's ?v=: the installer's modules with it)
   // the firmware on the FM-1 by its name: MASIF's rooms are MASIF whatever its HELLO says (before 2026-10-21 it said zp12)
   const devName = (h) => (h.rooms === 1 ? "MASIF " + h.version.replace(/^\S+\s*/, "") : h.version).trim().toUpperCase();
   const $ = (q) => document.querySelector(q), $$ = (q) => [...document.querySelectorAll(q)];
@@ -563,7 +564,7 @@
     input.onmidimessage = (ev) => l.receive(ev.data);
     const h = await l.hello();
     if (h.rooms !== 1) { msg(`THIS FM-1 RUNS ${devName(h)}: INSTALL MASIF FIRST`); return; }
-    S.link = l; S.kit = h.kit; localStorage.setItem("masif-kit", h.kit);
+    S.link = l; S.kit = h.kit; S.midi = { input }; localStorage.setItem("masif-kit", h.kit);
     try { localStorage.setItem("masif-app", JSON.stringify(h.app ? { lo: h.app.lo, hi: h.app.hi } : null)); } catch (x) { /* (only a convenience) */ }
     $("#lamp").classList.add("on");
     access.onstatechange = () => { if (!isF(input)) { S.link = null; S.songs = null; $("#lamp").classList.remove("on"); status("DISCONNECTED"); } };
@@ -615,6 +616,126 @@
       S.link = null; $("#lamp").classList.remove("on");
       msg("RESTORED: THE FM-1 STARTS AGAIN. CONNECT ONCE IT HAS");
     });
+  };
+
+  // ---- INSTALL / UPGRADE (the user, 2026-10-24): Felucca's updater (../fm1ota.js, the protocol tools/fm1_install.py
+  // speaks) with the package this page carries (firmware/latest.json) or one from a file; only MASIF's (FM-1_96N)
+  const inst = { busy: false, pkg: null, mode: "install" };
+  const instDlg = $("#inst-dlg");
+  const prog = (t) => { $("#inst-prog").textContent = t; };
+  const verNum = (v) => (String(v).match(/(\d+)\.(\d+)/) || [0, 0, 0]).slice(1).reduce((a, x) => a * 1000 + +x, 0);
+  async function pagePackage() {                   // the release this page carries, checked against its SHA-256
+    if (inst.pkg) return inst.pkg;
+    const m = await fetch(`firmware/latest.json?${Date.now()}`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    if (!m) return null;
+    const b = await fetch(`firmware/${m.file}${VQ}`).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null);
+    if (!b) return null;
+    const P = await import(`../fm1pkg.js${VQ}`), bytes = new Uint8Array(b);
+    if ((await P.sha256hex(bytes)) !== m.sha256 || P.productOf(bytes) !== m.product) throw new Error("THE PAGE'S PACKAGE IS DAMAGED: RELOAD THE PAGE");
+    return (inst.pkg = { bytes, version: m.version, product: m.product, name: `MASIF ${m.version}` });
+  }
+  async function filePackage(f) {
+    const P = await import(`../fm1pkg.js${VQ}`), bytes = new Uint8Array(await f.arrayBuffer());
+    const product = P.productOf(bytes);
+    if (product === P.STOCK_V15_PRODUCT) {         // (M-VAVE's own, only unmodified: the way back, as Felucca's page)
+      try { await P.validateStockPackage(bytes); } catch (x) { throw new Error(`${f.name.toUpperCase()} IS NOT THE UNMODIFIED OFFICIAL V15 (FM-1.fwsc)`); }
+      return { bytes, version: null, product, name: "M-VAVE's official V15", stock: true };
+    }
+    if (!/^FM-1_96\d$/.test(product)) throw new Error(`${f.name.toUpperCase()} IS NOT A MASIF PACKAGE (${product || "NO IDENTITY"})`);
+    return { bytes, version: null, product, name: f.name };
+  }
+  function instShow(pkg) {
+    const up = inst.mode === "upgrade";
+    $("#inst-title").textContent = up ? "UPGRADE" : "INSTALL";
+    $("#inst-what").textContent = !pkg ? "This page has no MASIF package with it: choose one with FROM FILE…" :
+      pkg.stock ? `${pkg.name} (${pkg.product}) goes back onto the FM-1. MASIF's songs and samples are gone after it: BACKUP first (RESTORE puts them back once MASIF is installed again).` :
+      up ? `${devName(S.link.info)} on the FM-1 becomes ${pkg.name} (${pkg.product}). Your songs stay. BACKUP first: the samples in the FM-1's largest room are gone after the install, and SYNC POOL puts them back.` :
+      `${pkg.name} (${pkg.product}) goes onto the FM-1, whatever firmware it runs now. Sounds and songs of another firmware do not carry over. Close other MIDI apps first.`;
+    $("#inst-yes").disabled = !pkg; $("#inst-yes").textContent = pkg && pkg.stock ? "INSTALL V15" : up ? "UPGRADE" : "INSTALL";
+    $("#inst-btns").hidden = false; $("#inst-close").hidden = true;
+    prog(""); inst.chosen = pkg;
+    if (!instDlg.open) instDlg.showModal();
+  }
+  async function instOpen(mode) {
+    if (S.busy || inst.busy) return;
+    if (!navigator.requestMIDIAccess) { msg("THIS BROWSER HAS NO WEB MIDI: CHROME OR EDGE"); return; }
+    inst.mode = mode;
+    let pkg = null;
+    try { pkg = await pagePackage(); } catch (x) { msg(String(x.message || x)); }
+    if (mode === "upgrade") {
+      if (!S.link) { msg("CONNECT FIRST (OR INSTALL)"); return; }
+      const have = (S.link.info.version || "").replace(/^\S+\s*/, "");
+      if (pkg && verNum(have) >= verNum(pkg.version) && !confirm(`The FM-1 has MASIF ${have || "?"}, this page MASIF ${pkg.version}: it is up to date. Install it again?`)) return;
+    }
+    instShow(pkg);
+  }
+  $("#install").onclick = () => instOpen("install");
+  $("#upgrade").onclick = () => instOpen("upgrade");
+  $("#inst-no").onclick = () => instDlg.close();
+  $("#inst-ok").onclick = () => instDlg.close();
+  instDlg.addEventListener("cancel", (ev) => { if (inst.busy) ev.preventDefault(); });   // (no Esc while it writes)
+  $("#inst-file").onclick = () => $("#fwfile").click();
+  $("#fwfile").onchange = async () => {
+    const f = $("#fwfile").files[0];
+    $("#fwfile").value = "";
+    if (!f) return;
+    try { instShow(await filePackage(f)); } catch (x) { prog(String(x.message || x)); }
+  };
+  const guard = (ev) => { ev.preventDefault(); ev.returnValue = ""; };
+  const STEP = { start: (id) => `STARTING: THE FM-1 RUNS ${id}`, verify: (n) => `THE FM-1 CHECKS THE PACKAGE (${n})`,
+                 loader: () => "THE FM-1 RESTARTS INTO ITS UPDATER…", reboot: () => "WRITTEN: THE FM-1 RESTARTS…", done: (id) => `INSTALLED: ${id}` };
+  const WHY = { notfound: "NO FM-1 FOUND: USB CABLE, AND CLOSE OTHER MIDI APPS", model: "THAT IS NOT AN FM-1",
+                stopped: "THE FM-1 STOPPED ANSWERING", lost: "THE FM-1 WAS DISCONNECTED", noloader: "THE UPDATER DID NOT APPEAR: REPLUG THE USB CABLE AND PRESS INSTALL AGAIN (IT FINISHES THE UPDATE)",
+                noreturn: "THE FM-1 DID NOT COME BACK: SWITCH IT OFF AND ON", mismatch: "INSTALLED, BUT THE FM-1 REPORTS ANOTHER IDENTITY",
+                foreign: "THE FM-1 IS IN ANOTHER FIRMWARE'S UPDATE MODE: FINISH THAT WITH ITS OWN UPDATER",
+                finish: "THE FM-1 IS IN MASIF'S UPDATE MODE: FINISH THAT WITH INSTALL FIRST, THEN GO BACK TO V15" };
+  $("#inst-yes").onclick = async () => {
+    const pkg = inst.chosen;
+    if (!pkg || inst.busy) return;
+    inst.busy = true; S.busy = true; document.body.classList.add("busy"); addEventListener("beforeunload", guard);
+    $("#inst-btns").hidden = true;
+    stop();
+    if (S.midi) S.midi.input.onmidimessage = null;             // (the updater takes the port over)
+    S.link = null; S.songs = null; $("#lamp").classList.remove("on");
+    let ok = false;
+    try {
+      const P = await import(`../fm1pkg.js${VQ}`), O = await import(`../fm1ota.js${VQ}`);
+      const image = P.logicalImage(pkg.bytes), per = Math.ceil(image.length / 512);
+      const step = (k, v) => { const t = k === "write" ? `WRITING ${Math.min(99, Math.round(v / per * 100))}%` : (STEP[k] || (() => k.toUpperCase()))(v); prog(t); status(t); };
+      const access = await navigator.requestMIDIAccess({ sysex: true });
+      const up = new O.Updater(access);
+      prog("LOOKING FOR THE FM-1…");
+      if (pkg.stock) {                                         // (the official loader's image: never through MASIF's loader)
+        const ota = await up.find((id) => /^ota-/i.test(id.model));
+        if (ota) {
+          ota.link.close();
+          if (/^ota-FM-1_9\d\d$/i.test(ota.id.text)) throw Object.assign(new Error("finish"), { code: "finish" });
+          if (!(await up.resume(image, step, { product: pkg.product }))) throw Object.assign(new Error("stopped"), { code: "stopped" });
+        } else await up.install(image, pkg.product, step);
+      } else if (await up.resume(image, step)) {                      // (an update that was cut off: finished first)
+        step("reboot");
+        await new Promise((r) => setTimeout(r, 3000));
+        const back = await up.waitFor((id) => !/^ota-/i.test(id.model), 40000);
+        if (!back) throw Object.assign(new Error("noreturn"), { code: "noreturn" });
+        back.link.close();
+        step("done", back.id.text);
+      } else await up.install(image, pkg.product, step);
+      ok = true;
+    } catch (x) {
+      prog(`NOT INSTALLED: ${WHY[x.code] || String(x.message || x).toUpperCase()}`); status("ERROR");
+    }
+    inst.busy = false; S.busy = false; document.body.classList.remove("busy"); removeEventListener("beforeunload", guard);
+    $("#inst-close").hidden = false;
+    if (ok && pkg.stock) {
+      prog("INSTALLED: M-VAVE'S OFFICIAL V15. THIS PAGE INSTALLS MASIF AGAIN WHENEVER YOU WANT.");
+      msg("THE FM-1 RUNS THE OFFICIAL V15");
+    } else if (ok) {
+      prog(`INSTALLED: ${pkg.name}. SYNC POOL PUTS YOUR SAMPLES BACK.`);
+      msg("INSTALLED: SYNC POOL PUTS YOUR SAMPLES BACK");
+      S.dirty = true; saveOrder();
+      await new Promise((r) => setTimeout(r, 1500));
+      $("#connect").click();                                 // (only reads: the samples go back at SYNC)
+    } else status("NOT CONNECTED");
   };
 
   // ---- the skins, the tabs, the help box

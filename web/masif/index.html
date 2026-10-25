@@ -9,7 +9,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MASIF</title>
-<link rel="stylesheet" href="masif.css?v=2026-10-24d">
+<link rel="stylesheet" href="masif.css?v=2026-10-24g">
 </head>
 <body data-skin="med" data-family="box" data-mode="sampler">
 
@@ -32,8 +32,8 @@
       <div class="body">
         <div class="row"><div class="lamp" id="lamp"></div><span id="status">NOT CONNECTED</span></div>
         <button class="btn" id="connect" data-help="Connect to the FM-1 over USB (Chrome or Edge: Web MIDI). Its samples come into the list.">CONNECT</button>
-        <button class="btn" id="install" disabled data-help="Put MASIF on an FM-1 that runs another firmware. Comes with the first release.">INSTALL</button>
-        <button class="btn" id="upgrade" disabled data-help="Bring the FM-1's MASIF up to this page's version. Comes with the first release.">UPGRADE</button>
+        <button class="btn" id="install" data-help="Put MASIF on the FM-1, whatever firmware it runs now. At your own risk: do not unplug it while it installs.">INSTALL</button>
+        <button class="btn" id="upgrade" data-help="Bring the connected FM-1's MASIF up to this page's version. BACKUP first; SYNC POOL afterwards.">UPGRADE</button>
         <button class="btn hot" id="sync" data-help="The FM-1's pool becomes the ticked samples, in the list's order: new ones go over, unticked ones come off.">SYNC POOL</button>
         <button class="btn" id="backup" data-help="Everything the FM-1 holds (samples, songs) into one file on this computer.">BACKUP</button>
         <button class="btn" id="restore" data-help="A backup file back onto the FM-1: everything it holds becomes what the file has.">RESTORE</button>
@@ -173,7 +173,7 @@ trademarks of their owners.</p>
 <ul>
   <li>An <b>M-VAVE FM-1</b> and a USB cable that carries data, not just power.</li>
   <li><b>Chrome or Edge</b> on a computer. This page talks to the FM-1 over Web MIDI, which other browsers lack.</li>
-  <li>For installing: <b>Python 3</b> with two small packages, <code>mido</code> and <code>python-rtmidi</code> (see 3).</li>
+  <li>Nothing else: the page installs MASIF too. (The command-line installer needs Python 3, see 3.)</li>
   <li>Close other MIDI apps (DAWs, editors) while this page or the installer talks to the FM-1. Only one program
       can hold its MIDI port.</li>
 </ul>
@@ -188,6 +188,20 @@ back.</p>
 <p>MASIF comes with <b>no warranty</b>. Its authors are not responsible for an FM-1 that no longer starts, for lost
 sounds or songs, or for any other damage (GPL-3.0, sections 15 and 16).</p>
 </div>
+<p><b>From this page</b> (Chrome or Edge):</p>
+<ol class="steps">
+  <li>Plug in the FM-1 and switch it on. Close other MIDI apps.</li>
+  <li>Click <b>INSTALL</b> (in the FM-1 box at the left of the SAMPLER tab), read what it says, and click
+      <b>INSTALL</b> in it. Allow MIDI when the browser asks.</li>
+  <li>The FM-1 checks the package, restarts into its updater, and the page shows <b>WRITING nn%</b>. Leave
+      everything alone until it says <b>INSTALLED</b> (under a minute). The FM-1 restarts into MASIF and the page
+      connects to it.</li>
+  <li>Add samples and <b>SYNC POOL</b> (see 5), or <b>RESTORE</b> a backup (see 12).</li>
+</ol>
+<p>The page installs the MASIF release it carries. <b>FROM FILE…</b> in the same box installs a MASIF package
+(<code>.fwsc</code>) from your computer instead, or M-VAVE's official firmware to go back (see 13); it refuses any
+other firmware.</p>
+<p><b>Or with the command-line installer</b> (Python 3):</p>
 <ol class="steps">
   <li><b>Download</b> the latest MASIF release (the <code>.zip</code>) from
       <a href="https://github.com/thecemeterygates/masif-fm1/releases/latest" target="_blank" rel="noopener">github.com/thecemeterygates/masif-fm1/releases</a>
@@ -197,14 +211,10 @@ sounds or songs, or for any other damage (GPL-3.0, sections 15 and 16).</p>
 <pre>python3 -m venv .venv
 . .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install mido python-rtmidi</pre></li>
-  <li><b>Plug in the FM-1 and switch it on.</b> Check it is found:
-<pre>python3 tools/fm1_install.py --info</pre></li>
-  <li><b>Install</b>, and leave the cable alone until it says it is done. The FM-1 restarts on its own:
+  <li><b>Install</b> with the FM-1 plugged in, and leave the cable alone until it says it is done:
 <pre>python3 tools/fm1_install.py packages/masif-0.1.fwsc</pre></li>
-  <li>The FM-1 restarts into MASIF. Next time, you only need step 2's <code>activate</code> line before
-      installing.</li>
 </ol>
-<p>The INSTALL and UPGRADE buttons on this page will do the same from the browser in a later release.</p>
+<p>If an install is cut off, click INSTALL again (or run the same command): it finishes the update.</p>
 
 <h1 id="g-first">4 · First start</h1>
 <ol class="steps">
@@ -515,11 +525,22 @@ CPU row shows the load.</p>
 <h1 id="g-update">13 · Updating MASIF</h1>
 <ol class="steps">
   <li><b>BACKUP</b> first (see 12).</li>
-  <li>Install the new package exactly as in 3.</li>
+  <li>CONNECT, then click <b>UPGRADE</b>: it compares the FM-1's version with this page's and installs the newer
+      one, as INSTALL does (see 3).</li>
   <li><b>SYNC POOL again.</b> An install rewrites the part of the flash where most of the sample time lives, so the
       samples there are gone after an update. Your list on this page still has them, and one SYNC puts them back.
       Songs are kept.</li>
 </ol>
+<p><b>Back to M-VAVE's official firmware:</b></p>
+<ol class="steps">
+  <li><b>BACKUP</b> first (see 12): the official firmware does not keep MASIF's samples or songs.</li>
+  <li>Download the official FM-1 firmware (V15) from M-VAVE's site and unzip it: it holds <code>FM-1.fwsc</code>.</li>
+  <li>Click <b>INSTALL</b>, then <b>FROM FILE…</b>, and choose that <code>FM-1.fwsc</code>. The page checks it is the
+      unmodified official file; any other is refused. Click <b>INSTALL V15</b> and leave everything alone until it
+      says <b>INSTALLED</b>.</li>
+  <li>To come back to MASIF: INSTALL from this page, then RESTORE your backup.</li>
+</ol>
+<p>Only this page goes back: the command-line installer takes MASIF packages only.</p>
 
 <h1 id="g-limits">14 · Limits and known issues</h1>
 <ul>
@@ -529,7 +550,6 @@ CPU row shows the load.</p>
   <li>USB audio (the FM-1 as a sound card) is tested on macOS. Windows and Linux are not tested yet. It runs at
       44.1 kHz only.</li>
   <li>MIX on the FM-1's sampler records MASIF's own sound only, not the computer's sound coming in over USB.</li>
-  <li>INSTALL and UPGRADE on this page come in a later release: use the installer (see 3).</li>
   <li>Bluetooth and the radio are not used.</li>
 </ul>
 <p><b>Planned</b> (no dates yet):</p>
@@ -545,10 +565,9 @@ CPU row shows the load.</p>
 <ul>
   <li><b>"NO FM-1 FOUND"</b>: use a data cable, close other MIDI apps, and use Chrome or Edge. On a virtual machine,
       give the FM-1 to the system the browser runs on.</li>
-  <li><b>An install was cut off</b>: run the same install command again. The installer finishes an interrupted
-      update.</li>
-  <li><b>Back to another firmware</b>: install its package with the same installer. Going back to M-VAVE's
-      official firmware this way has not been tested yet.</li>
+  <li><b>An install was cut off</b>: click INSTALL again (or run the same install command). It finishes an
+      interrupted update.</li>
+  <li><b>Back to M-VAVE's official firmware</b>: see 13.</li>
 </ul>
 
 <h1 id="g-credits">16 · Credits and licence</h1>
@@ -580,12 +599,24 @@ owners; MASIF is not affiliated with them.</p>
     <div class="row tight"><div class="grow"></div><button class="btn" id="clear-no">CANCEL</button><button class="btn" id="clear-yes">CONFIRM CLEAR</button></div>
   </div>
 </dialog>
+<!-- INSTALL / UPGRADE: what is about to happen, the warning, then its progress (masif.js, ../fm1ota.js) -->
+<dialog class="win mid" id="inst-dlg">
+  <h2><span id="inst-title">INSTALL</span></h2>
+  <div class="body">
+    <p class="help" id="inst-what"></p>
+    <p class="help warn"><b>At your own risk.</b> Do not unplug the FM-1, switch it off or let the computer sleep until it says INSTALLED: an install cut off at the wrong moment can leave the FM-1 unable to start, and then only a hardware flasher brings it back. No warranty.</p>
+    <p class="help inst-prog" id="inst-prog"></p>
+    <div class="row tight" id="inst-btns"><button class="btn" id="inst-file" data-help="Install a MASIF package (.fwsc) from this computer instead, or M-VAVE's unmodified official FM-1.fwsc (V15) to go back.">FROM FILE…</button><div class="grow"></div><button class="btn" id="inst-no">CANCEL</button><button class="btn hot" id="inst-yes">INSTALL</button></div>
+    <div class="row tight" id="inst-close" hidden><div class="grow"></div><button class="btn" id="inst-ok">CLOSE</button></div>
+  </div>
+</dialog>
+<input type="file" id="fwfile" accept=".fwsc" hidden>
 <input type="file" id="file" accept="audio/*,.wav,.aif,.aiff,.mp3,.flac,.ogg" multiple hidden>
 <input type="file" id="bakfile" accept=".zp12bak,.masifbak" hidden>
 
 <!-- ?v=: a new one with every change, so a browser never runs an old script with a new page -->
-<script src="../zp12link.js?v=2026-10-24d"></script>
-<script src="masif-dsp.js?v=2026-10-24d"></script>
-<script src="masif.js?v=2026-10-24d"></script>
+<script src="../zp12link.js?v=2026-10-24g"></script>
+<script src="masif-dsp.js?v=2026-10-24g"></script>
+<script src="masif.js?v=2026-10-24g"></script>
 </body>
 </html>

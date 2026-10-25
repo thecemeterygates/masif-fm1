@@ -448,3 +448,8 @@ body[data-mode="guide"] #guide { display: grid; grid-template-columns: 230px min
 #w-about .help { font-size: 11px; line-height: 1.4; }
 #w-about .guide-link { color: inherit; font-weight: 700; text-decoration: underline; }
 .guide a { color: inherit; font-weight: 700; }
+
+/* the INSTALL / UPGRADE pop-up: wider than CLEAR's, the warning marked, the progress large */
+#inst-dlg { width: min(520px, calc(100vw - 32px)); }
+#inst-dlg .warn { border-left: 4px solid #ff3050; padding-left: 10px; }
+#inst-dlg .inst-prog { font-size: 15px; font-weight: 700; min-height: 1.4em; }

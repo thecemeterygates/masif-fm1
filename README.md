@@ -26,19 +26,21 @@
 
 ## Install
 
-1. Download the latest release and unzip it.
-2. In a terminal in that folder (once):
+**From the web page** (Chrome or Edge): https://thecemeterygates.github.io/masif-fm1/. Plug in the FM-1, close
+other MIDI apps, click **INSTALL** and leave everything alone until it says INSTALLED (under a minute). Then add
+samples and SYNC POOL. **UPGRADE** brings a connected FM-1 up to the page's version; BACKUP first and SYNC POOL
+afterwards: an install rewrites the part of the flash where most of the sample time lives.
 
-       python3 -m venv .venv
-       . .venv/bin/activate          # Windows: .venv\Scripts\activate
-       pip install mido python-rtmidi
+**Back to M-VAVE's official firmware:** BACKUP, then INSTALL, FROM FILE… and choose M-VAVE's unmodified
+`FM-1.fwsc` (V15). Install MASIF again and RESTORE whenever you want it back.
 
-3. FM-1 plugged in and switched on, other MIDI apps closed:
+**Or with the command-line installer** (MASIF packages only): download the latest release, unzip it, and in a
+terminal in that folder:
 
-       python3 tools/fm1_install.py packages/masif-0.1.fwsc
-
-Then open the web page, CONNECT, add samples and SYNC POOL. After every update, SYNC POOL again: an install
-rewrites the part of the flash where most of the sample time lives.
+    python3 -m venv .venv
+    . .venv/bin/activate          # Windows: .venv\Scripts\activate
+    pip install mido python-rtmidi
+    python3 tools/fm1_install.py packages/masif-0.1.fwsc
 
 ## Building
 

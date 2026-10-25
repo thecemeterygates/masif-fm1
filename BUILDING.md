@@ -45,8 +45,9 @@ The tracker, player, screens, sampler, song store and the link run on the comput
     cc -std=gnu99 -O1 -g -Wall -Wextra -Wno-unused-function -Wno-int-to-pointer-cast -fsanitize=address,undefined -fno-sanitize-recover=all -Ifirmware/hal -o build/host/test_usb_audio host-tests/test_usb_audio.c && build/host/test_usb_audio
     python3 tests/fm1_install_test.py build/masif.fwsc
 
-`node --experimental-websocket tests/masif_browser_test.mjs` drives the web page in a headless Firefox; it needs
-`(cd web && python3 -m http.server 8000)` running.
+`node --experimental-websocket tests/masif_browser_test.mjs` drives the web page in a headless Firefox, and
+`tests/masif_install_test.mjs` its INSTALL against a simulated FM-1; both need `(cd web && python3 -m http.server 8000)`
+running.
 
 ## The web page
 
