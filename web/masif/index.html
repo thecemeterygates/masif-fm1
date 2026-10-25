@@ -1,0 +1,591 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     MASIF's web app: the sampler. Sounds from this computer (a file, a microphone, a line or USB input, what the
+     computer plays) are trimmed, looped and processed here, kept in this browser's library, and ticked ones go
+     onto the FM-1 at SYNC POOL. Chrome or Edge (Web MIDI). The tracker mode is out for now (the user, 2026-10-14):
+     its mock-up is in git before that day. masif-dsp.js: the sound's work and the sync; masif.js: the page. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MASIF</title>
+<link rel="stylesheet" href="masif.css?v=2026-10-24d">
+</head>
+<body data-skin="med" data-family="box" data-mode="sampler">
+
+<!-- the hyper skins' backdrop: a ray-traced floor to the horizon, chrome balls over it (masif.css .scene) -->
+<div class="scene"><div class="sun"></div><div class="floor"></div><div class="haze"></div>
+  <i class="ball b1"></i><i class="ball b2"></i><i class="ball b3"></i><i class="ball b4"></i><i class="ball b5"></i></div>
+
+<header class="bar">
+  <div class="logo">MASIF</div>
+  <div class="switch" id="mode"><button data-v="sampler" class="on" data-help="The sampler: your sounds, and SYNC POOL onto the FM-1.">SAMPLER</button><button data-v="guide" data-help="How MASIF works: install, sync, sample time, the FM-1's controls, credits.">GUIDE</button></div>
+  <div class="tip" id="help" aria-live="polite"></div>     <!-- what the mouse is over does: told here -->
+  <div class="swatches" id="skin" data-help="The theme of this page: VICE, RETRO, MONO, STEEL. A different one comes up every time the page opens."></div>
+</header>
+
+<!-- ============ the sampler: narrow boxes at the left, three windows in a stack as a Winamp's ============ -->
+<main id="sampler">
+  <aside class="side">
+    <section class="win" id="w-dev">
+      <h2><span>FM-1</span></h2>
+      <div class="body">
+        <div class="row"><div class="lamp" id="lamp"></div><span id="status">NOT CONNECTED</span></div>
+        <button class="btn" id="connect" data-help="Connect to the FM-1 over USB (Chrome or Edge: Web MIDI). Its samples come into the list.">CONNECT</button>
+        <button class="btn" id="install" disabled data-help="Put MASIF on an FM-1 that runs another firmware. Comes with the first release.">INSTALL</button>
+        <button class="btn" id="upgrade" disabled data-help="Bring the FM-1's MASIF up to this page's version. Comes with the first release.">UPGRADE</button>
+        <button class="btn hot" id="sync" data-help="The FM-1's pool becomes the ticked samples, in the list's order: new ones go over, unticked ones come off.">SYNC POOL</button>
+        <button class="btn" id="backup" data-help="Everything the FM-1 holds (samples, songs) into one file on this computer.">BACKUP</button>
+        <button class="btn" id="restore" data-help="A backup file back onto the FM-1: everything it holds becomes what the file has.">RESTORE</button>
+      </div>
+    </section>
+    <section class="win" id="w-about">
+      <h2><span>ABOUT</span></h2>
+      <div class="body about">
+        <p class="help">MASIF: a 4-track sample tracker for the M-VAVE FM-1. Free software, GPL-3.0. Not affiliated with M-VAVE.</p>
+        <p class="help">Built on <b>zp12</b> (zvenson), <b>SLOOP</b> (isod89) and <b>Felucca</b> (Leo Kuroshita), with USB audio from <b>Ketch</b> (Adrien Risser-Zhuang) and <b>NoteSorcery</b>.</p>
+        <a class="help guide-link" href="#g-credits">ALL CREDITS IN THE GUIDE</a>
+      </div>
+    </section>
+  </aside>
+
+    <section class="win top" id="w-main">
+      <h2><span>MASIF SAMPLER</span></h2>
+      <div class="body">
+        <div class="lcd" data-help="The open sample. Drag START and END, and the loop's lines by their balls. Wheel: along it when zoomed; Ctrl + wheel: zoom.">
+          <div class="lcd-top"><b id="s-time">00:00.00</b><span id="s-name">DROP A SOUND HERE</span></div>
+          <div class="lcd-info"><i id="s-rate">26 KHZ</i><i id="s-bits">12 BIT</i><i id="s-len">0.00 S</i><i id="s-inst">SAMPLE --</i></div>
+          <div class="wavebox" id="wavebox">
+            <canvas id="wave" width="520" height="120"></canvas>
+            <div class="mk edge" id="mk-start" data-help="START: where the sample begins (drag it by its ball). What is before it is cut away on the FM-1."></div>
+            <div class="mk edge" id="mk-end" data-help="END: where the sample ends (drag it by its ball)."></div>
+            <div class="mk loop" id="mk-la" data-help="The loop's start: a looping instrument comes back here. Drag it by its ball."></div>
+            <div class="mk loop" id="mk-lb" data-help="The loop's end: it turns back here, what is after it is not heard. Drag it by its ball."></div>
+            <div class="mk taper" id="mk-ta" data-help="FADE IN: the loop's level rises from its start to here. Drag it in from the loop's start."></div>
+            <div class="mk taper" id="mk-tb" data-help="FADE OUT: the loop's level falls from here to its end. Drag it in from the loop's end."></div>
+            <div class="ph" id="ph"></div>
+          </div>
+          <input type="range" id="w-scroll" min="0" max="1000" value="0" data-help="Along the sample, when it is zoomed in.">
+        </div>
+        <!-- under the wave (the user, 2026-10-15): one row of keys, then SOURCE at the left -->
+        <div class="deck">
+          <div class="keys">
+            <button class="key" id="k-home" data-help="To the start."><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="3" height="14"/><path d="M20 5v14L8 12z"/></svg></button>
+            <button class="key" id="k-play" data-help="Play it as the FM-1 will: at its rate and bits, its loop round and round until STOP."><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4.5v15L20 12z"/></svg></button>
+            <button class="key" id="k-stop" data-help="Stop."><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5.5" y="5.5" width="13" height="13"/></svg></button>
+            <button class="key arm" id="k-arm" data-help="ARM: listen to the SOURCE without recording. The wave shows what comes in; drag its solid line to where REC starts."><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5a7.5 7.5 0 1 1 0 15 7.5 7.5 0 0 1 0-15zm0 2.3a5.2 5.2 0 1 0 0 10.4 5.2 5.2 0 0 0 0-10.4z"/></svg></button>
+            <button class="key rec" id="k-rec" data-help="Record from SOURCE. It starts when the sound passes THRESH and stops when the FM-1's room is full."><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/></svg></button>
+            <button class="key loopk" id="m-loop" data-help="LOOP (lit: on): drag the loop's two long-dashed lines by their balls. The FM-1 loops exactly there."><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h9.2l-2.1-2.1L15.5 3.5 20 8l-4.5 4.5-1.4-1.4L16.2 9H7a2 2 0 0 0-2 2v2H3v-2a4 4 0 0 1 4-4zm10 10H7.8l2.1 2.1-1.4 1.4L4 16l4.5-4.5 1.4 1.4L7.8 15H17a2 2 0 0 0 2-2v-2h2v2a4 4 0 0 1-4 4z"/></svg></button>
+            <button class="key" id="k-fade" data-help="FADE (lit: on, with LOOP): drag the two short-dashed lines in from the loop's ends: the loop fades in and out there, no click."><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5 L21 17.5 M3 17.5 L21 6.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><rect x="2" y="19.6" width="20" height="1.8"/><rect x="2" y="2.6" width="20" height="1.8"/></svg></button>
+            <button class="key cyc" id="k-zoom" data-help="ZOOM: 1x, 2x, 4x into the wave (lit when in). Wheel: along it; Ctrl + wheel: zoom."><small>ZOOM</small><b></b></button>
+            <button class="key cyc" id="k-speed" data-help="SPEED: stored fast, played slow (zp12). 45→33: a third more time; ×2: twice the time, an octave down; ×2.7: both."><small>SPEED</small><b></b></button>
+            <button class="key cyc" id="k-bits" data-help="BITS: 12; 8 (lit): half as much time again, more grit; 4 (lit): ADPCM, near three times 12 bit's time, clean lows, rougher highs."><small>BITS</small><b></b></button>
+            <button class="key cyc" id="k-rate" data-help="RATE: 26 kHz, 27.5 kHz, or 13 kHz: twice the time, less treble."><small>RATE</small><b></b></button>
+          </div>
+          <label class="srcrow" data-help="What REC records. FILE: a sound file. LINE IN: the 1/8&quot; jack. MIC: the built-in mic. USB: an interface or the FM-1."><span>SOURCE</span><select id="src"><option value="file">FILE</option><option value="line">LINE IN</option><option value="mic">MIC</option><option value="usb">USB</option></select></label>
+        </div>
+      </div>
+    </section>
+
+    <section class="win mid" id="w-proc">
+      <h2><span>PROCESS</span></h2>
+      <div class="body">
+        <div class="faders" id="faders"></div>
+        <div class="row tight procbar">
+          <button class="chip" id="p-rev" data-help="Backwards.">REVERSE</button><button class="chip on" id="p-norm" data-help="As loud as it goes without clipping (as the FM-1 stores it).">NORMALIZE</button>
+          <div class="grow"></div>
+          <button class="btn" id="p-clear" data-help="The sampler empty: nothing open (the sample stays in the list, as it is).">CLEAR</button>
+          <button class="btn" id="p-new" data-help="The result as a new sample in the list (the faders back to zero).">SAVE AS NEW</button>
+          <button class="btn" id="p-over" data-help="The result in the sample's place (the faders back to zero).">OVERWRITE</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="win bot" id="w-pool">
+      <h2><span id="pool-title">SAMPLE POOL</span></h2>
+      <div class="body">
+        <div class="row">
+          <div class="tabs" id="tabs"><button data-v="pool" class="on">POOL</button><button data-v="songs">SONGS</button><button data-v="themes">THEMES</button></div>
+        </div>
+        <div class="row">
+          <div class="gauge" id="gauge" data-help="The FM-1's sample time: what the ticked samples take of it. It will not let you tick past the end.">
+            <div class="gauge-bar"><div id="room-bar"></div></div>
+            <div class="gauge-text"><b id="room-used">0.0</b> OF <b id="room-all">0.0</b> S ON THE FM-1 · <b id="room-n">0</b>/24</div>
+          </div>
+        </div>
+        <ol class="list" id="list" data-help="Your samples, kept in this browser. Ticked ones go to the FM-1 at SYNC; the number is an instrument's SAMPLE there."></ol>
+        <div class="row tight">
+          <button class="chip" id="l-add" data-help="Sound files from this computer into the list (or drop them anywhere on the page).">+ ADD</button><button class="chip" id="l-rm" data-help="Out of the list (and off the FM-1 at the next SYNC).">- REMOVE</button>
+          <button class="chip" id="l-up" data-help="One up in the list: the order is the FM-1's sample numbers.">▲</button><button class="chip" id="l-dn" data-help="One down in the list.">▼</button>
+          <button class="chip" id="l-name" data-help="Its name: 8 letters on the FM-1.">NAME</button><button class="chip" id="l-wav" data-help="As a WAV file to this computer, as the FM-1 will play it.">TO PC</button>
+          <div class="grow"></div>
+          <span class="small" id="pool-msg"></span>
+        </div>
+      </div>
+    </section>
+</main>
+
+<!-- ============ the guide: a contents box at the left, the text in one window that scrolls ============ -->
+<main id="guide">
+  <aside class="side">
+    <section class="win" id="w-toc">
+      <h2><span>CONTENTS</span></h2>
+      <div class="body">
+        <nav class="toc" id="toc">
+          <a href="#g-about">1 About MASIF</a>
+          <a href="#g-need">2 What you need</a>
+          <a href="#g-install">3 Install on the FM-1</a>
+          <a href="#g-first">4 First start</a>
+          <a href="#g-page">5 This page at a glance</a>
+          <a href="#g-edit">6 Editing a sample</a>
+          <a href="#g-sync">7 How SYNC POOL works</a>
+          <a href="#g-time">8 Sample time</a>
+          <a href="#g-rec">9 Recording on the FM-1</a>
+          <a href="#g-controls">10 The FM-1's controls</a>
+          <a href="#g-songs">11 Songs</a>
+          <a href="#g-backup">12 Backup and restore</a>
+          <a href="#g-update">13 Updating MASIF</a>
+          <a href="#g-limits">14 Limits and known issues</a>
+          <a href="#g-trouble">15 If something goes wrong</a>
+          <a href="#g-credits">16 Credits and licence</a>
+        </nav>
+      </div>
+    </section>
+  </aside>
+
+  <section class="win top" id="w-guide">
+    <h2><span>GUIDE</span></h2>
+    <div class="body">
+      <article class="guide" id="guide-text">
+
+<h1 id="g-about">1 · About MASIF</h1>
+<p><b>MASIF</b> is free firmware that turns the M-VAVE FM-1 into a <b>4-track sample tracker</b> with a small
+rack sampler. You write songs on the FM-1 itself, in rows and columns: a <b>song</b> is a list of <b>chains</b>,
+a chain is a list of <b>phrases</b>, a phrase is 16 rows of notes and effects. Every sound comes from you: MASIF
+ships with <b>no sounds at all</b>. You load samples from this page, or record them on the FM-1.</p>
+<p>This page is MASIF's <b>sampler and librarian</b>. It runs in your browser and nothing is uploaded anywhere. You
+drop in sound files (or record from a mic, the line in or USB), trim and loop them, and process them. Then
+<b>SYNC POOL</b> puts the ones you ticked onto the FM-1.</p>
+<p class="note">MASIF is independent. It is not made, endorsed or supported by M-VAVE. "M-VAVE" and "FM-1" are
+trademarks of their owners.</p>
+
+<h1 id="g-need">2 · What you need</h1>
+<ul>
+  <li>An <b>M-VAVE FM-1</b> and a USB cable that carries data, not just power.</li>
+  <li><b>Chrome or Edge</b> on a computer. This page talks to the FM-1 over Web MIDI, which other browsers lack.</li>
+  <li>For installing: <b>Python 3</b> with two small packages, <code>mido</code> and <code>python-rtmidi</code> (see 3).</li>
+  <li>Close other MIDI apps (DAWs, editors) while this page or the installer talks to the FM-1. Only one program
+      can hold its MIDI port.</li>
+</ul>
+
+<h1 id="g-install">3 · Install on the FM-1</h1>
+<div class="warn">
+<p><b>Install at your own risk.</b> Installing replaces the FM-1's firmware. Sounds and songs you made on another
+firmware do not carry over.</p>
+<p><b>While it installs, do not unplug the cable, switch the FM-1 off or let the computer sleep.</b> An install
+that is cut off at the wrong moment can leave the FM-1 unable to start. Then only a hardware flasher can bring it
+back.</p>
+<p>MASIF comes with <b>no warranty</b>. Its authors are not responsible for an FM-1 that no longer starts, for lost
+sounds or songs, or for any other damage (GPL-3.0, sections 15 and 16).</p>
+</div>
+<ol class="steps">
+  <li><b>Download</b> the latest MASIF release (the <code>.zip</code>) from
+      <a href="https://github.com/thecemeterygates/masif-fm1/releases/latest" target="_blank" rel="noopener">github.com/thecemeterygates/masif-fm1/releases</a>
+      and unzip it. It holds the firmware package (<code>packages/masif-0.1.fwsc</code>) and the installer
+      (<code>tools/fm1_install.py</code>).</li>
+  <li><b>Open a terminal in that folder</b> and make a Python environment for the installer (once):
+<pre>python3 -m venv .venv
+. .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install mido python-rtmidi</pre></li>
+  <li><b>Plug in the FM-1 and switch it on.</b> Check it is found:
+<pre>python3 tools/fm1_install.py --info</pre></li>
+  <li><b>Install</b>, and leave the cable alone until it says it is done. The FM-1 restarts on its own:
+<pre>python3 tools/fm1_install.py packages/masif-0.1.fwsc</pre></li>
+  <li>The FM-1 restarts into MASIF. Next time, you only need step 2's <code>activate</code> line before
+      installing.</li>
+</ol>
+<p>The INSTALL and UPGRADE buttons on this page will do the same from the browser in a later release.</p>
+
+<h1 id="g-first">4 · First start</h1>
+<ol class="steps">
+  <li>Open this page in Chrome or Edge with the FM-1 plugged in, and click <b>CONNECT</b>. Allow MIDI when the
+      browser asks. The lamp goes green and the status shows the firmware and the FM-1's sample time.</li>
+  <li><b>Drop sound files</b> anywhere on the page, or click <b>+ ADD</b>. They appear in the POOL list.</li>
+  <li><b>Tick</b> the ones you want on the FM-1 (the box at the left of each row). The gauge shows how much of
+      the FM-1's time they take.</li>
+  <li>Click <b>SYNC POOL</b>. When the status says IN SYNC, the samples are on the FM-1.</li>
+  <li>On the FM-1, open an instrument (the I page). On its SAMPLE row, hold EDIT: the pool opens, and EDIT gives
+      the marked sample to the instrument.</li>
+</ol>
+
+<h1 id="g-page">5 · This page at a glance</h1>
+<figure>
+<svg class="fig" viewBox="0 0 640 300" role="img" aria-label="The sampler page: the FM-1 box at the left, the sampler and the process window in the middle, the pool at the right, the help bar at the top">
+  <rect class="f-line" x="4" y="4" width="632" height="34" rx="4"/>
+  <text class="f-t" x="18" y="27">MASIF</text><rect class="f-soft" x="120" y="11" width="380" height="20" rx="3"/>
+  <text class="f-s" x="132" y="25">help: what the mouse is over</text>
+  <rect class="f-line" x="4" y="48" width="130" height="248" rx="4"/>
+  <text class="f-s" x="16" y="68">FM-1</text>
+  <rect class="f-soft" x="16" y="80" width="106" height="20" rx="3"/><text class="f-xs" x="24" y="94">CONNECT</text>
+  <rect class="f-hot" x="16" y="108" width="106" height="20" rx="3"/><text class="f-xs f-on" x="24" y="122">SYNC POOL</text>
+  <rect class="f-soft" x="16" y="136" width="106" height="20" rx="3"/><text class="f-xs" x="24" y="150">BACKUP</text>
+  <rect class="f-soft" x="16" y="164" width="106" height="20" rx="3"/><text class="f-xs" x="24" y="178">RESTORE</text>
+  <rect class="f-line" x="144" y="48" width="300" height="140" rx="4"/>
+  <text class="f-s" x="156" y="68">MASIF SAMPLER</text>
+  <path class="f-wave" d="M160 120 l8 -18 l8 30 l8 -26 l8 22 l8 -30 l8 34 l8 -20 l8 14 l8 -24 l8 26 l8 -12 l8 10 l8 -16 l8 14 l8 -8 l8 6 l8 -6 l8 4 l8 -2 l8 2 l8 -2 l8 2 l8 0 l8 0 l8 0 l8 0 l8 0 l8 0 l8 0 l8 0 l8 0 l8 0"/>
+  <g class="f-soft"><rect x="156" y="158" width="18" height="18"/><rect x="178" y="158" width="18" height="18"/><rect x="200" y="158" width="18" height="18"/><rect x="222" y="158" width="18" height="18"/><rect x="244" y="158" width="18" height="18"/><rect x="266" y="158" width="18" height="18"/><rect x="288" y="158" width="18" height="18"/><rect x="310" y="158" width="28" height="18"/><rect x="342" y="158" width="28" height="18"/><rect x="374" y="158" width="28" height="18"/><rect x="406" y="158" width="28" height="18"/></g>
+  <rect class="f-line" x="144" y="198" width="300" height="98" rx="4"/>
+  <text class="f-s" x="156" y="218">PROCESS</text>
+  <g class="f-soft"><rect x="164" y="228" width="6" height="44"/><rect x="200" y="228" width="6" height="44"/><rect x="236" y="228" width="6" height="44"/><rect x="272" y="228" width="6" height="44"/><rect x="308" y="228" width="6" height="44"/><rect x="344" y="228" width="6" height="44"/><rect x="380" y="228" width="6" height="44"/><rect x="416" y="228" width="6" height="44"/></g>
+  <rect class="f-line" x="454" y="48" width="182" height="248" rx="4"/>
+  <text class="f-s" x="466" y="68">SAMPLE POOL</text>
+  <rect class="f-soft" x="466" y="78" width="158" height="10" rx="3"/><rect class="f-ink" x="466" y="78" width="96" height="10" rx="3"/>
+  <g class="f-xs"><text x="470" y="110">■ 00 KICK</text><text x="470" y="128">■ 01 SNARE</text><text x="470" y="146">■ 02 BASS</text><text x="470" y="164">□ —  VOX</text><text x="470" y="182">■ 03 CHORD</text></g>
+  <g class="f-num"><circle cx="122" cy="21" r="11"/><circle cx="122" cy="62" r="11"/><circle cx="432" cy="62" r="11"/><circle cx="432" cy="212" r="11"/><circle cx="624" cy="62" r="11"/></g>
+  <g class="f-numt"><text x="122" y="25">1</text><text x="122" y="66">2</text><text x="432" y="66">3</text><text x="432" y="216">4</text><text x="624" y="66">5</text></g>
+</svg>
+<figcaption>The sampler page. The numbers match the list below.</figcaption>
+</figure>
+<ol class="legend">
+  <li><b>The help bar.</b> Hold the mouse over anything and this bar says what it does.</li>
+  <li><b>FM-1.</b> CONNECT, SYNC POOL, BACKUP, RESTORE. The lamp is green while the FM-1 is connected.</li>
+  <li><b>MASIF SAMPLER.</b> The open sample's wave with its marks (see 6). Under it the keys: to the start, PLAY,
+      STOP, ARM, REC, LOOP, FADE, ZOOM, SPEED, BITS, RATE, and SOURCE (what REC records: a file, the line in,
+      the mic or a USB input).</li>
+  <li><b>PROCESS.</b> Faders that change the sound in the browser: gain, fades, compression, stretch, pitch, drive
+      and more. REVERSE and NORMALIZE are switches. <b>SAVE AS NEW</b> keeps the result as another sample,
+      <b>OVERWRITE</b> puts it in this one's place.</li>
+  <li><b>SAMPLE POOL.</b> Your library. Ticked samples go to the FM-1, <b>in this order</b>: the number at the left
+      is the sample's number on the FM-1. The gauge shows the FM-1's time used. The SONGS tab lists the songs
+      saved on the FM-1. THEMES lists the FM-1's screen colours. Under the list: + ADD, − REMOVE, ▲ ▼ (move), NAME
+      (8 letters), TO PC (as a WAV file).</li>
+</ol>
+<p>The coloured dots at the top right change this page's look. They don't change anything on the FM-1.</p>
+
+<h1 id="g-edit">6 · Editing a sample</h1>
+<figure>
+<svg class="fig" viewBox="0 0 640 210" role="img" aria-label="A wave with its marks: START and END solid with a ball at the top, the loop's two long-dashed lines with a ball at the bottom, the fades' short-dashed lines inside the loop">
+  <rect class="f-lcd" x="4" y="4" width="632" height="202" rx="6"/>
+  <rect class="f-loop" x="300" y="16" width="250" height="160"/>
+  <path class="f-wave" d="M70 96 l6 -40 l6 70 l6 -60 l6 52 l6 -66 l6 72 l6 -54 l6 40 l6 -50 l6 46 l6 -34 l6 30 l6 -38 l6 34 l6 -26 l6 24 l6 -30 l6 28 l6 -20 l6 20 l6 -26 l6 24 l6 -18 l6 18 l6 -22 l6 22 l6 -16 l6 16 l6 -20 l6 20 l6 -14 l6 14 l6 -18 l6 18 l6 -14 l6 14 l6 -16 l6 16 l6 -12 l6 12 l6 -14 l6 14 l6 -12 l6 12 l6 -12 l6 12 l6 -10 l6 10 l6 -12 l6 12 l6 -10 l6 10 l6 -10 l6 10 l6 -10 l6 10 l6 -8 l6 8 l6 -8 l6 8 l6 -8 l6 8 l6 -8 l6 8 l6 -6 l6 6 l6 -6 l6 6 l6 -4 l6 4 l6 -4 l6 4 l6 -2 l6 2 l6 -2 l6 2"/>
+  <line class="f-mark" x1="70" y1="16" x2="70" y2="176"/><circle class="f-ball" cx="70" cy="22" r="8"/>
+  <line class="f-mark" x1="590" y1="16" x2="590" y2="176"/><circle class="f-ball" cx="590" cy="22" r="8"/>
+  <line class="f-mark f-dash" x1="300" y1="16" x2="300" y2="170"/><circle class="f-ball" cx="300" cy="170" r="8"/>
+  <line class="f-mark f-dash" x1="550" y1="16" x2="550" y2="170"/><circle class="f-ball" cx="550" cy="170" r="8"/>
+  <line class="f-mark f-dot" x1="340" y1="16" x2="340" y2="176"/><circle class="f-ball" cx="340" cy="96" r="6"/>
+  <line class="f-mark f-dot" x1="500" y1="16" x2="500" y2="176"/><circle class="f-ball" cx="500" cy="96" r="6"/>
+  <g class="f-xs f-lcdt"><text x="78" y="196">START</text><text x="548" y="196">END</text><text x="262" y="196">LOOP A</text><text x="512" y="160" text-anchor="end">LOOP B</text>
+  <text x="346" y="58">FADE IN</text><text x="494" y="58" text-anchor="end">FADE OUT</text></g>
+</svg>
+<figcaption>The marks on the wave. Drag each one by its ball.</figcaption>
+</figure>
+<ul>
+  <li><b>START / END</b> (solid lines, a ball at the top): what the FM-1 keeps. Anything outside them is cut away
+      on the FM-1 and takes no room.</li>
+  <li><b>LOOP</b> (the key lights up): the two long-dashed lines are where a looping instrument goes round. The
+      FM-1 loops exactly there.</li>
+  <li><b>FADE</b> (with LOOP on): the two short-dashed lines fade the loop in after its start and out before its
+      end, so the loop doesn't click.</li>
+  <li><b>ZOOM</b> 1×, 2×, 4×. Use the mouse wheel to move along, and Ctrl + wheel to zoom.</li>
+  <li><b>PLAY</b> plays the sample as the FM-1 will: at its rate and bits, looping until you press STOP.</li>
+  <li><b>RATE</b> 26 kHz, 27.5 kHz or 13 kHz, and <b>BITS</b> 12, 8 or 4 (ADPCM): how the sample is stored on
+      the FM-1. Lower settings fit more time and sound grittier (see 8).</li>
+  <li>Recording on this page: pick a <b>SOURCE</b>, press <b>ARM</b> to hear and see it, then <b>REC</b>.
+      REC starts once the sound passes the threshold line (drag it on the wave). It stops when you press it again,
+      or when the FM-1's free room is full.</li>
+</ul>
+<p>Everything you do here is kept in this browser and saved as you go. The original sound always stays as it came,
+so you can change your mind later.</p>
+
+<h1 id="g-sync">7 · How SYNC POOL works</h1>
+<figure>
+<svg class="fig" viewBox="0 0 640 230" role="img" aria-label="SYNC POOL: the browser's list, ticked samples in order, goes onto the FM-1's 24 places; samples recorded on the FM-1 come into the list first">
+  <rect class="f-line" x="10" y="20" width="230" height="190" rx="6"/>
+  <text class="f-s" x="24" y="44">THIS BROWSER</text>
+  <g class="f-xs"><text x="24" y="72">■ KICK</text><text x="24" y="94">■ SNARE</text><text x="24" y="116">□ VOX (unticked)</text><text x="24" y="138">■ BASS</text><text x="24" y="160">■ REC01 (made on FM-1)</text><text x="24" y="182">■ CHORD</text></g>
+  <rect class="f-line" x="400" y="20" width="230" height="190" rx="6"/>
+  <text class="f-s" x="414" y="44">FM-1 POOL (24)</text>
+  <g class="f-xs"><text x="414" y="72">00 KICK</text><text x="414" y="94">01 SNARE</text><text x="414" y="116">02 BASS</text><text x="414" y="138">03 REC01</text><text x="414" y="160">04 CHORD</text><text x="414" y="182">05 … 17 empty</text></g>
+  <path class="f-arrow" d="M250 92 H388"/><path class="f-head" d="M388 84 l12 8 l-12 8z"/>
+  <text class="f-s" x="270" y="82">2 SYNC POOL</text>
+  <path class="f-arrow f-dash" d="M390 160 H262"/><path class="f-head" d="M262 152 l-12 8 l12 8z"/>
+  <text class="f-xs" x="262" y="150">1 fetched first</text>
+</svg>
+<figcaption>The list in this browser is the master copy. The FM-1 ends up holding exactly what is ticked, in that order.</figcaption>
+</figure>
+<ol class="steps">
+  <li><b>Fetched first.</b> SYNC (and CONNECT) first reads the FM-1's pool. Any sample the list doesn't have yet,
+      such as a take you recorded on the FM-1, is copied into the list, ticked. So a sync never loses a recording.</li>
+  <li><b>Then written.</b> The FM-1's pool becomes the <b>ticked</b> samples in the <b>list's order</b>. New or
+      changed ones are written, unchanged ones stay where they are, and unticked ones come off the FM-1.</li>
+  <li><b>Numbers.</b> A sample's place among the ticked ones is its number on the FM-1 (SMP 00, 01 … in hex, as the
+      list shows it). An instrument plays a sample by its
+      number, so if you reorder the list and sync, your instruments play different samples. Add new samples at the
+      end to keep your songs as they are.</li>
+  <li><b>Removing.</b> − REMOVE takes a sample out of the list, and it comes off the FM-1 at the next SYNC (it is
+      not fetched back). Unticking keeps it in the list but takes it off the FM-1.</li>
+</ol>
+<p>A <b>*</b> or "NOT SYNCED YET" means the list and the FM-1 differ: SYNC when you are ready. Stop the song on the
+FM-1 before syncing.</p>
+
+<h1 id="g-time">8 · Sample time: the FM-1 vs this page</h1>
+<p>This page can hold samples of any length, as many as your browser has room for. The FM-1 can't: it keeps
+samples in a few free areas of its own flash memory, <b>about 730 KB in all</b>, with places for
+<b>24 samples</b>. How many seconds that is depends on how each sample is stored:</p>
+<figure>
+<div class="bars" role="img" aria-label="The FM-1's sample time in seconds by format">
+  <div class="tbar"><span>26 kHz · 12 bit</span><i style="--w: 18%"></i><b>≈ 19 s</b></div>
+  <div class="tbar"><span>26 kHz · 8 bit</span><i style="--w: 27%"></i><b>≈ 29 s</b></div>
+  <div class="tbar"><span>13 kHz · 12 bit</span><i style="--w: 35%"></i><b>≈ 38 s</b></div>
+  <div class="tbar"><span>26 kHz · 4 bit ADPCM</span><i style="--w: 50%"></i><b>≈ 54 s</b></div>
+  <div class="tbar"><span>13 kHz · 8 bit</span><i style="--w: 53%"></i><b>≈ 57 s</b></div>
+  <div class="tbar"><span>13 kHz · 4 bit ADPCM</span><i style="--w: 100%"></i><b>≈ 108 s</b></div>
+</div>
+<figcaption>The whole pool, in seconds, if every sample used that format. The gauge over the list shows the exact
+figure for your samples once the FM-1 is connected.</figcaption>
+</figure>
+<ul>
+  <li><b>One sample can't be longer than the biggest free area</b>: about 12 s at 26 kHz 12 bit (more at lower
+      settings). A tick that doesn't fit is refused, and the gauge shakes.</li>
+  <li><b>Mono.</b> The FM-1 stores one channel. Stereo files are mixed down.</li>
+  <li><b>Fit more:</b> trim with START / END, lower the RATE (13 kHz halves the treble and doubles the time), and
+      lower the BITS (8 bit: half as much time again, grittier; 4-bit ADPCM: close to three times 12 bit's time,
+      clean lows, rougher highs). Each sample has its own settings.</li>
+  <li>What you hear with PLAY on this page is what the FM-1 will play. Trust your ears over the numbers.</li>
+</ul>
+
+<h1 id="g-rec">9 · Recording on the FM-1</h1>
+<p>The FM-1 can record by itself, too. Go to the instrument page, then SHIFT + DOWN to the sampler page (R). Set the
+rows with EDIT + arrows, then press PLAY (the button printed REC) to arm. Press it again to stop.</p>
+<table>
+  <tr><th>SOURCE</th><td><b>USB</b>: what the computer plays into the FM-1 (it shows up as an audio output on the
+      computer). <b>MIX</b>: MASIF's own sound, for a bounce of your song.</td></tr>
+  <tr><th>START</th><td><b>LEVEL</b>: when the sound passes the LEVEL row (with a moment before it).
+      <b>PLAY</b>: with the song, and it stops when the song stops. <b>NOW</b>: at once.</td></tr>
+  <tr><th>RATE / BITS</th><td>44, 22 or 11 kHz; 12, 8 or 4-bit ADPCM.</td></tr>
+  <tr><th>MAX</th><td>The longest take you want, in seconds.</td></tr>
+</table>
+<p>A take on the FM-1 is held in its working memory while it runs, so it has its own limit, shorter than the pool's:</p>
+<table class="nums">
+  <tr><th></th><th>12 bit</th><th>8 bit</th><th>4-bit ADPCM</th></tr>
+  <tr><th>44 kHz</th><td>1.9 s</td><td>2.9 s</td><td>5.4 s</td></tr>
+  <tr><th>22 kHz</th><td>3.8 s</td><td>5.8 s</td><td>10.8 s</td></tr>
+  <tr><th>11 kHz</th><td>7.7 s</td><td>11.5 s</td><td>21.7 s</td></tr>
+</table>
+<p>The take stops by itself at that limit. Then <b>SAVING nn%</b> shows while it is written to flash, and the
+FM-1's sound is muted for that short time. A take goes into the pool as <b>REC01</b>, REC02, and so on. The next
+CONNECT or SYNC copies it into this page's list. For longer samples, record on this page instead.</p>
+
+<h1 id="g-controls">10 · The FM-1's controls</h1>
+<p>MASIF gives several buttons new jobs. The drawing labels only the controls MASIF uses: what each does in MASIF
+is large, and the word printed on the FM-1 is small under it. The faint buttons do nothing yet. The arrows and the
+commands are outlined, so they are easy to find.</p>
+<figure>
+<svg class="fig fm1" viewBox="0 0 900 470" role="img" aria-label="The FM-1 with the controls MASIF uses labelled: the four knobs at the left, knobs 1 to 4, the arrows (SEL, HOME, SAVE, ARP) and the commands (EDIT, GLO, PLAY, REC) outlined, the note keys">
+<rect class="f-line" x="10" y="10" width="880" height="450" rx="30"/>
+<circle class="f-line" cx="75" cy="62" r="17"/><line class="f-tick" x1="75" y1="45" x2="75" y2="54"/>
+<text class="f-xs f-mid" x="75" y="95">MASTER</text><text class="f-use f-mid" x="75" y="109">volume</text>
+<circle class="f-line" cx="175" cy="62" r="17"/><line class="f-tick" x1="175" y1="45" x2="175" y2="54"/>
+<text class="f-xs f-mid" x="175" y="95">SELECT</text><text class="f-use f-mid" x="175" y="109">cursor ◀ ▶</text>
+<circle class="f-line" cx="75" cy="150" r="17"/><line class="f-tick" x1="75" y1="133" x2="75" y2="142"/>
+<text class="f-xs f-mid" x="75" y="183">PRESETS</text><text class="f-use f-mid" x="75" y="197">pages</text>
+<circle class="f-line" cx="175" cy="150" r="17"/><line class="f-tick" x1="175" y1="133" x2="175" y2="142"/>
+<text class="f-xs f-mid" x="175" y="183">ALGORITHM</text><text class="f-use f-mid" x="175" y="197">cursor ▲ ▼</text>
+<rect class="f-off" x="48" y="222" width="56" height="20" rx="5"/>
+<rect class="f-off" x="118" y="222" width="56" height="20" rx="5"/>
+<rect class="f-line" x="255" y="34" width="150" height="170" rx="8"/><text class="f-s f-mid" x="330" y="124">MASIF</text>
+<circle class="f-line" cx="470" cy="52" r="17"/><line class="f-tick" x1="470" y1="35" x2="470" y2="44"/>
+<text class="f-xs f-mid" x="470" y="86">KNOB 1</text>
+<circle class="f-line" cx="550" cy="52" r="17"/><line class="f-tick" x1="550" y1="35" x2="550" y2="44"/>
+<text class="f-xs f-mid" x="550" y="86">KNOB 2</text>
+<circle class="f-line" cx="630" cy="52" r="17"/><line class="f-tick" x1="630" y1="35" x2="630" y2="44"/>
+<text class="f-xs f-mid" x="630" y="86">KNOB 3</text>
+<circle class="f-line" cx="710" cy="52" r="17"/><line class="f-tick" x1="710" y1="35" x2="710" y2="44"/>
+<text class="f-xs f-mid" x="710" y="86">KNOB 4</text>
+<text class="f-use" x="748" y="48">OPTION + turn a</text><text class="f-use" x="748" y="62">knob: it takes the</text><text class="f-use" x="748" y="76">setting at the cursor</text>
+<rect class="f-off" x="445" y="112" width="58" height="34" rx="6"/>
+<rect class="f-line" x="515" y="112" width="58" height="34" rx="6"/>
+<text class="f-key f-mid" x="544" y="128">▲</text><text class="f-prn f-mid" x="544" y="140">SEL</text>
+<rect class="f-off" x="585" y="112" width="58" height="34" rx="6"/>
+<rect class="f-off" x="655" y="112" width="58" height="34" rx="6"/>
+<rect class="f-line" x="725" y="112" width="58" height="34" rx="6"/>
+<text class="f-key f-mid" x="754" y="128">OPTION</text><text class="f-prn f-mid" x="754" y="140">EDIT</text>
+<rect class="f-line" x="795" y="112" width="58" height="34" rx="6"/>
+<text class="f-key f-mid" x="824" y="128">EDIT</text><text class="f-prn f-mid" x="824" y="140">GLO</text>
+<rect class="f-line" x="445" y="156" width="58" height="34" rx="6"/>
+<text class="f-key f-mid" x="474" y="172">◀</text><text class="f-prn f-mid" x="474" y="184">HOME</text>
+<rect class="f-line" x="515" y="156" width="58" height="34" rx="6"/>
+<text class="f-key f-mid" x="544" y="172">▼</text><text class="f-prn f-mid" x="544" y="184">SAVE</text>
+<rect class="f-line" x="585" y="156" width="58" height="34" rx="6"/>
+<text class="f-key f-mid" x="614" y="172">▶</text><text class="f-prn f-mid" x="614" y="184">ARP</text>
+<rect class="f-off" x="655" y="156" width="58" height="34" rx="6"/>
+<rect class="f-line" x="725" y="156" width="58" height="34" rx="6"/>
+<text class="f-key f-mid" x="754" y="172">SHIFT</text><text class="f-prn f-mid" x="754" y="184">PLAY</text>
+<rect class="f-line" x="795" y="156" width="58" height="34" rx="6"/>
+<text class="f-key f-mid" x="824" y="172">PLAY</text><text class="f-prn f-mid" x="824" y="184">REC</text>
+<path class="f-group" d="M507 104 H581 V148 H651 V198 H437 V148 H507 Z"/>
+<rect class="f-group" x="717" y="104" width="144" height="94" rx="10"/>
+<text class="f-s f-hotx f-mid" x="544" y="218">ARROWS</text><text class="f-s f-hotx f-mid" x="789" y="218">COMMANDS</text>
+<rect class="f-line" x="43.0" y="340" width="45.2" height="74" rx="16"/>
+<rect class="f-line" x="94.2" y="340" width="45.2" height="74" rx="16"/>
+<rect class="f-line" x="145.5" y="340" width="45.2" height="74" rx="16"/>
+<rect class="f-line" x="196.8" y="340" width="45.2" height="74" rx="16"/>
+<rect class="f-line" x="248.0" y="340" width="45.2" height="74" rx="16"/>
+<rect class="f-line" x="299.2" y="340" width="45.2" height="74" rx="16"/>
+<rect class="f-line" x="350.5" y="340" width="45.2" height="74" rx="16"/>
+<rect class="f-line" x="401.8" y="340" width="45.2" height="74" rx="16"/>
+<rect class="f-line" x="453.0" y="340" width="45.2" height="74" rx="16"/>
+<rect class="f-line" x="504.2" y="340" width="45.2" height="74" rx="16"/>
+<rect class="f-line" x="555.5" y="340" width="45.2" height="74" rx="16"/>
+<rect class="f-line" x="606.8" y="340" width="45.2" height="74" rx="16"/>
+<rect class="f-line" x="658.0" y="340" width="45.2" height="74" rx="16"/>
+<rect class="f-line" x="709.2" y="340" width="45.2" height="74" rx="16"/>
+<rect class="f-line" x="760.5" y="340" width="45.2" height="74" rx="16"/>
+<rect class="f-line" x="811.8" y="340" width="45.2" height="74" rx="16"/>
+<rect class="f-soft2" x="71.2" y="256" width="40" height="72" rx="16"/>
+<rect class="f-soft2" x="122.5" y="256" width="40" height="72" rx="16"/>
+<rect class="f-soft2" x="173.8" y="256" width="40" height="72" rx="16"/>
+<rect class="f-soft2" x="276.2" y="256" width="40" height="72" rx="16"/>
+<rect class="f-soft2" x="327.5" y="256" width="40" height="72" rx="16"/>
+<rect class="f-soft2" x="430.0" y="256" width="40" height="72" rx="16"/>
+<rect class="f-soft2" x="481.2" y="256" width="40" height="72" rx="16"/>
+<rect class="f-soft2" x="532.5" y="256" width="40" height="72" rx="16"/>
+<rect class="f-soft2" x="635.0" y="256" width="40" height="72" rx="16"/>
+<rect class="f-soft2" x="686.2" y="256" width="40" height="72" rx="16"/>
+<rect class="f-soft2" x="788.8" y="256" width="40" height="72" rx="16"/>
+<text class="f-s f-mid" x="450" y="442">NOTE KEYS: on the phrase page they enter a note; elsewhere you hear it</text>
+</svg>
+<figcaption>The FM-1 in MASIF.</figcaption>
+</figure>
+<p>The same in a table, with the printed label on the left:</p>
+<table class="keys">
+  <tr><th>Printed</th><th>In MASIF</th></tr>
+  <tr><td>SEL · SAVE · HOME · ARP</td><td>UP · DOWN · LEFT · RIGHT (the cursor; hold to repeat)</td></tr>
+  <tr><td>PLAY</td><td>SHIFT (its green light is always on)</td></tr>
+  <tr><td>EDIT</td><td>OPTION</td></tr>
+  <tr><td>GLO</td><td>EDIT</td></tr>
+  <tr><td>REC</td><td>PLAY: red while stopped, a flash on each beat while playing; blinks while recording</td></tr>
+  <tr><td>Note keys</td><td>On the phrase page: enter that note. Elsewhere: hear it</td></tr>
+  <tr><td>SELECT / ALGORITHM knobs</td><td>The cursor along / up and down; with SHIFT or EDIT held: the value</td></tr>
+  <tr><td>PRESETS knob</td><td>The pages, along (with SHIFT: up and down)</td></tr>
+  <tr><td>KNOB 1–4</td><td>OPTION + turn a knob: it takes the setting under the cursor</td></tr>
+</table>
+<figure>
+<svg class="fig small" viewBox="0 0 420 190" role="img" aria-label="The pages: S C P I T in a row; Project above Song and Mixer below it; Modulation above Instrument and the Sampler below it; Groove above Table">
+  <g class="f-line"><rect x="20" y="70" width="60" height="44" rx="4"/><rect x="100" y="70" width="60" height="44" rx="4"/><rect x="180" y="70" width="60" height="44" rx="4"/><rect x="260" y="70" width="60" height="44" rx="4"/><rect x="340" y="70" width="60" height="44" rx="4"/></g>
+  <g class="f-soft"><rect x="20" y="14" width="60" height="40" rx="4"/><rect x="20" y="130" width="60" height="40" rx="4"/><rect x="260" y="14" width="60" height="40" rx="4"/><rect x="260" y="130" width="60" height="40" rx="4"/><rect x="340" y="14" width="60" height="40" rx="4"/></g>
+  <g class="f-s" text-anchor="middle"><text x="50" y="98">SONG</text><text x="130" y="98">CHAIN</text><text x="210" y="98">PHRASE</text><text x="290" y="98">INSTR</text><text x="370" y="98">TABLE</text></g>
+  <g class="f-xs" text-anchor="middle"><text x="50" y="38">PROJECT</text><text x="50" y="154">MIXER</text><text x="290" y="38">MOD</text><text x="290" y="154">SAMPLER</text><text x="370" y="38">GROOVE</text></g>
+</svg>
+<figcaption>The pages. SHIFT + arrows move between them.</figcaption>
+</figure>
+<ul>
+  <li><b>EDIT</b> on an empty cell enters what you entered last. Press it twice quickly on an empty song or chain
+      cell (or on a phrase's instrument) for a new chain, phrase or instrument.</li>
+  <li><b>EDIT + arrows</b> change a value: LEFT / RIGHT by 1, UP / DOWN by 16 (an octave for notes). <b>Hold
+      EDIT</b> on an effect or a named setting to open its list.</li>
+  <li><b>OPTION + EDIT</b> cuts (on an empty note: a note OFF). <b>SHIFT + OPTION</b> starts a selection,
+      <b>SHIFT + EDIT</b> pastes.</li>
+  <li><b>PLAY</b> plays what the page is on (the song from the cursor, the chain, the phrase). <b>SHIFT + PLAY</b>
+      plays the song. <b>OPTION + PLAY</b> mutes the cursor's track, <b>EDIT + PLAY</b> solos it.</li>
+  <li>The FM-1 remembers where you were a few seconds after the last touch, and comes back there at power-on.</li>
+</ul>
+
+<h1 id="g-songs">11 · Songs</h1>
+<p>The FM-1 holds <b>16 songs</b>. On the PROJECT page (SHIFT + UP from the song page), set SONG to a slot and give
+it a name. Then use <b>EDIT on SAVE</b>, <b>LOAD</b> or <b>NEW</b>; stop the song first. The SONGS tab on this
+page lists what is saved. Songs only store sample <b>numbers</b>, not the sounds, so keep your pool's order (see 7).
+A song's tempo, key, scale and groove are on the PROJECT page too.</p>
+<p><b>TEST</b> on the PROJECT page loads a deliberately heavy song (all four tracks busy, every effect working),
+to check that your FM-1 plays cleanly under full load. It replaces the song in memory, so save yours first. The
+CPU row shows the load.</p>
+
+<h1 id="g-backup">12 · Backup and restore</h1>
+<ul>
+  <li><b>BACKUP</b> reads everything MASIF keeps on the FM-1 (samples and songs) into one
+      <code>.masifbak</code> file on this computer.</li>
+  <li><b>RESTORE</b> writes a backup file back. Everything on the FM-1 becomes what the file holds, then the FM-1
+      restarts; CONNECT again once it has.</li>
+  <li>Back up <b>before every update</b> and before trying anything new.</li>
+  <li>The list on this page lives <b>in this browser, at this address</b>. Another browser, another computer, or
+      clearing the site's data starts with an empty list. To move: CONNECT and SYNC there (the FM-1's samples come
+      into the new list), or keep your sounds as files with TO PC.</li>
+</ul>
+
+<h1 id="g-update">13 · Updating MASIF</h1>
+<ol class="steps">
+  <li><b>BACKUP</b> first (see 12).</li>
+  <li>Install the new package exactly as in 3.</li>
+  <li><b>SYNC POOL again.</b> An install rewrites the part of the flash where most of the sample time lives, so the
+      samples there are gone after an update. Your list on this page still has them, and one SYNC puts them back.
+      Songs are kept.</li>
+</ol>
+
+<h1 id="g-limits">14 · Limits and known issues</h1>
+<ul>
+  <li>24 samples, about 730 KB of sample memory (see 8). Mono only.</li>
+  <li>Four tracks. Heavy songs are fine: the TEST song peaks below half of the FM-1's audio time.</li>
+  <li><b>SPEED</b> on this page doesn't work yet. Leave it at 1×.</li>
+  <li>USB audio (the FM-1 as a sound card) is tested on macOS. Windows and Linux are not tested yet. It runs at
+      44.1 kHz only.</li>
+  <li>MIX on the FM-1's sampler records MASIF's own sound only, not the computer's sound coming in over USB.</li>
+  <li>INSTALL and UPGRADE on this page come in a later release: use the installer (see 3).</li>
+  <li>Bluetooth and the radio are not used.</li>
+</ul>
+<p><b>Planned</b> (no dates yet):</p>
+<ul>
+  <li>Variable-speed sample processing on this page.</li>
+  <li>Screen themes for the FM-1 that you make yourself.</li>
+  <li>More effects.</li>
+  <li>More ways to bounce a song into a sample.</li>
+  <li>Banks for KNOB 1–4, so each knob can hold several settings you choose.</li>
+</ul>
+
+<h1 id="g-trouble">15 · If something goes wrong</h1>
+<ul>
+  <li><b>"NO FM-1 FOUND"</b>: use a data cable, close other MIDI apps, and use Chrome or Edge. On a virtual machine,
+      give the FM-1 to the system the browser runs on.</li>
+  <li><b>An install was cut off</b>: run the same install command again. The installer finishes an interrupted
+      update.</li>
+  <li><b>Back to another firmware</b>: install its package with the same installer. Going back to M-VAVE's
+      official firmware this way has not been tested yet.</li>
+</ul>
+
+<h1 id="g-credits">16 · Credits and licence</h1>
+<p>MASIF is free software under the <b>GNU General Public License, version 3 only</b>. It is built on the work of
+others, whose code it uses under the same licence:</p>
+<ul class="credits">
+  <li><b>zp12</b> by zvenson: the firmware MASIF is built on (its voices, sample store and USB link).
+      <span class="src">github.com/zvenson/zp12</span></li>
+  <li><b>SLOOP</b> by isod89: the FM-1 firmware zp12 builds on. <span class="src">github.com/isod89/sloop-fm1</span></li>
+  <li><b>Felucca</b> by Leo Kuroshita (Hügelton Instruments): the FM-1 platform under SLOOP, and the installer,
+      <code>fm1_install.py</code>.</li>
+  <li><b>Ketch</b> by Adrien Risser-Zhuang: USB audio both ways. <span class="src">github.com/risseraka/fm1-tracker-ketch</span></li>
+  <li><b>NoteSorcery</b>: the computer's audio into the FM-1 (USB sample input), by way of Ketch.</li>
+  <li>The JieLi AC79 SDK's boot files (Apache-2.0) go into the package when it is built.</li>
+  <li>This page's fonts: Orbitron, Audiowide and VT323, under the SIL Open Font License.</li>
+</ul>
+<p>The full source and every licence are in the project's repository:
+<a href="https://github.com/thecemeterygates/masif-fm1" target="_blank" rel="noopener">github.com/thecemeterygates/masif-fm1</a>. "M-VAVE" and "FM-1" are trademarks of their
+owners; MASIF is not affiliated with them.</p>
+
+      </article>
+    </div>
+  </section>
+</main>
+<dialog class="win mid" id="clear-dlg">
+  <h2><span>CLEAR</span></h2>
+  <div class="body">
+    <p class="help">The sampler empties. The sample stays in the list, as it is.</p>
+    <div class="row tight"><div class="grow"></div><button class="btn" id="clear-no">CANCEL</button><button class="btn" id="clear-yes">CONFIRM CLEAR</button></div>
+  </div>
+</dialog>
+<input type="file" id="file" accept="audio/*,.wav,.aif,.aiff,.mp3,.flac,.ogg" multiple hidden>
+<input type="file" id="bakfile" accept=".zp12bak,.masifbak" hidden>
+
+<!-- ?v=: a new one with every change, so a browser never runs an old script with a new page -->
+<script src="../zp12link.js?v=2026-10-24d"></script>
+<script src="masif-dsp.js?v=2026-10-24d"></script>
+<script src="masif.js?v=2026-10-24d"></script>
+</body>
+</html>

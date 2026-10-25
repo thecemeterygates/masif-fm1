@@ -1,0 +1,450 @@
+/* SPDX-License-Identifier: GPL-3.0-only
+ * MASIF's web app: one layout that fills the browser's window, many skins. A skin is a block of variables: its
+ * colours (body[data-skin]) and, through its family, its shapes (body[data-family]): "hyper" the over-the-top
+ * Y2K ones (fat chrome bezels, ovals, glass, glow, a ray-traced backdrop), "blob" the rounded gadget, "box" the
+ * old trackers' and the boxy players'. A new skin, or a user's own later, is one more block.
+ * Fonts (fonts/, SIL Open Font License, their licence texts beside them): Orbitron, Audiowide, VT323. */
+@font-face { font-family: "Orbitron"; src: url("fonts/Orbitron.ttf"); font-weight: 400 900; }
+@font-face { font-family: "Audiowide"; src: url("fonts/Audiowide.ttf"); }
+@font-face { font-family: "VT323"; src: url("fonts/VT323.ttf"); }
+:root { --mono: "DejaVu Sans Mono", "Lucida Console", Menlo, Consolas, monospace; }
+
+/* ---- the shapes */
+body[data-family="hyper"] {
+  --font: "Orbitron", var(--mono); --font-title: "Audiowide", "Orbitron", var(--mono); --font-lcd: "Orbitron", var(--mono); --font-grid: var(--mono);
+  --r-top: 50%; --r-mid: 34px; --r-bot: 120px / 90px; --r-side: 44px 44px 90px 90px / 44px 44px 70px 70px;
+  --r-s: 26px; --r-key: 50%; --bezel: 24px; --orb: 46px; --title-r: 999px; --edge: 0px; --key-size: 54px;
+}
+body[data-family="blob"] {
+  --font: var(--mono); --font-title: var(--mono); --font-lcd: var(--mono); --font-grid: var(--mono);
+  --r-top: 90px 90px 30px 30px / 64px 64px 30px 30px; --r-mid: 30px; --r-bot: 30px 30px 110px 110px / 30px 30px 70px 70px; --r-side: 30px;
+  --r-s: 16px; --r-key: 50%; --bezel: 12px; --orb: 26px; --title-r: 0 0 18px 18px; --edge: 0px; --key-size: 44px;
+}
+body[data-family="box"] {
+  --font: var(--mono); --font-title: var(--mono); --font-lcd: "VT323", var(--mono); --font-grid: "VT323", var(--mono);
+  --r-top: 0px; --r-mid: 0px; --r-bot: 0px; --r-side: 0px; --r-s: 0px; --r-key: 0px; --bezel: 4px; --orb: 0px; --title-r: 0px; --edge: 2px; --key-size: 40px;
+}
+
+/* ---- the colours. The hyper family: after winamp8 (and 3), winamp9 */
+body[data-skin="liquid"] {
+  --sky: radial-gradient(1px 1px at 12% 8%, #fff 50%, transparent 51%), radial-gradient(1px 1px at 71% 5%, #fff 50%, transparent 51%),
+         radial-gradient(2px 2px at 38% 22%, #bff 50%, transparent 51%), radial-gradient(1px 1px at 86% 30%, #fff 50%, transparent 51%),
+         radial-gradient(2px 2px at 24% 36%, #9df 50%, transparent 51%), radial-gradient(1px 1px at 58% 15%, #fff 50%, transparent 51%),
+         linear-gradient(180deg, #01021a 0%, #06145e 28%, #1456d8 46%, #7fe9ff 54%, #0a2a8a 55%, #010516 100%);
+  --chk1: #f2fdff; --chk2: #0c46d8; --haze: rgba(140, 240, 255, .85); --sun: radial-gradient(circle, #fff 0%, #9ff 25%, rgba(60, 200, 255, .35) 45%, transparent 68%);
+  --ball: radial-gradient(circle at 30% 22%, #fff 0 5%, rgba(255, 255, 255, 0) 17%),
+          linear-gradient(180deg, #02072e 0%, #1250d0 34%, #9ff2ff 49%, #ffffff 51%, #0c46d8 54%, #dff9ff 66%, #0c46d8 78%, #02103c 100%);
+  --shell: linear-gradient(135deg, #f6ffff 0%, #8fe0ff 9%, #0c4fd0 24%, #c8f6ff 38%, #0a2f96 52%, #5ccaff 68%, #f0ffff 82%, #0a3ab0 100%);
+  --hi: rgba(255, 255, 255, .95); --lo: rgba(0, 8, 70, .85); --aura: rgba(70, 220, 255, .65);
+  --panel: linear-gradient(180deg, rgba(120, 220, 255, .22), rgba(10, 40, 140, .34)); --rim: #021040;
+  --title-bg: linear-gradient(180deg, #e6ff8a, #55d81e 55%, #1f8a08); --title-ink: #06300a;
+  --lcd: radial-gradient(ellipse at 50% 0%, rgba(30, 120, 230, .85), rgba(2, 14, 60, .9) 75%); --lcd-ink: #a8fdff; --lcd-dim: #49a6ea; --lcd-hot: #dcff4a;
+  --ink: #eaffff; --key: var(--ball); --key-ink: #ffffff;
+  --key-wide: linear-gradient(180deg, #d8f8ff 0%, #4ab0ff 40%, #0a3fb0 56%, #2f8fff 100%);
+  --on: linear-gradient(180deg, #f2ffb0 0%, #b4f03a 42%, #3fb80e 58%, #9be83a 100%); --on-ink: #0a3a10;
+  --slot: rgba(1, 10, 50, .85); --thumb: var(--ball);
+  --row-b: rgba(160, 255, 255, .08); --row-sel: #2a8cff; --row-sel-ink: #ffffff;
+  --glow: 0 0 8px #6ff, 0 0 22px rgba(80, 220, 255, .8), 0 0 46px rgba(40, 140, 255, .6); --shadow: 0 22px 46px rgba(0, 0, 30, .8);
+  --orb-bg: var(--ball);
+  --note: #ffffff; --inst: #a8fdff; --vol: #dcff4a; --fx: #ff9df2; --par: #ffd27a; --sw: #2a8cff;
+}
+body[data-skin="chrome"] {
+  --sky: linear-gradient(180deg, #0c0618 0%, #3a1440 22%, #c03a28 40%, #ffb040 51%, #fff0a0 54%, #2a0c06 55%, #050202 100%);
+  --chk1: #e8e8ec; --chk2: #18181c; --haze: rgba(255, 200, 110, .8); --sun: radial-gradient(circle, #fff 0%, #ffe890 22%, #ff8a30 40%, rgba(255, 90, 30, .3) 55%, transparent 70%);
+  --ball: radial-gradient(circle at 30% 22%, #fff 0 5%, rgba(255, 255, 255, 0) 17%),
+          linear-gradient(180deg, #1a0c24 0%, #b8402c 30%, #ffc060 47%, #ffffff 51%, #18181c 54%, #d8d8dc 66%, #18181c 78%, #050202 100%);
+  --shell: linear-gradient(135deg, #ffffff 0%, #c4ccd4 10%, #4a5258 24%, #f4f6f8 38%, #6c747c 52%, #e0e4e8 66%, #30363c 80%, #f8fafc 92%, #7a8288 100%);
+  --hi: rgba(255, 255, 255, .98); --lo: rgba(6, 8, 12, .9); --aura: rgba(255, 150, 60, .5);
+  --panel: linear-gradient(180deg, rgba(60, 66, 74, .5), rgba(10, 12, 16, .62)); --rim: #0a0c10;
+  --title-bg: linear-gradient(180deg, #4a5058, #14181c 60%, #000); --title-ink: #ffd890;
+  --lcd: linear-gradient(180deg, rgba(196, 214, 176, .92), rgba(138, 160, 118, .92)); --lcd-ink: #0c1608; --lcd-dim: #4c6040; --lcd-hot: #a01008;
+  --ink: #f4f6f8; --key: var(--ball); --key-ink: #ffffff;
+  --key-wide: linear-gradient(180deg, #ffffff 0%, #d0d6dc 40%, #7a8288 58%, #e4e8ec 100%);
+  --on: linear-gradient(180deg, #ffe0b0 0%, #ff8a40 42%, #c02808 58%, #ff7a30 100%); --on-ink: #2a0800;
+  --slot: rgba(6, 8, 12, .88); --thumb: var(--ball);
+  --row-b: rgba(0, 0, 0, .07); --row-sel: #182014; --row-sel-ink: #d0f0b0;
+  --glow: 0 0 6px rgba(255, 220, 150, .9), 0 0 20px rgba(255, 140, 50, .7); --shadow: 0 24px 46px rgba(0, 0, 0, .85);
+  --orb-bg: var(--ball);
+  --note: #0c1608; --inst: #163466; --vol: #245408; --fx: #a01008; --par: #503c08; --sw: #c4ccd4;
+}
+body[data-skin="chrome"] :is(.lcd-top b, .lcd-top span) { text-shadow: none; }
+body[data-skin="chrome"] :is(.btn, .chip, .key.big) { color: #101418; text-shadow: 0 1px 0 #fff; }
+body[data-family="hyper"] :is(.btn, .chip, .key.big, .switch button, .tabs button) { font-weight: 700; }
+body[data-skin="gadget"] {
+  --page: radial-gradient(ellipse at 50% 0%, #4a3a6a, #17121f 70%);
+  --shell: linear-gradient(165deg, #d9c6ff 0%, #9a7be0 30%, #6a4fc0 60%, #b7a0f0 85%, #4a3690 100%);
+  --hi: rgba(255, 255, 255, .8); --lo: rgba(30, 10, 80, .75);
+  --panel: linear-gradient(180deg, rgba(255, 255, 255, .18), rgba(40, 20, 100, .25));
+  --title-bg: linear-gradient(180deg, #2a2040, #120c20); --title-ink: #d9c6ff;
+  --lcd: linear-gradient(180deg, #a8b08a, #878f6a); --lcd-ink: #1a1e10; --lcd-dim: #5a6044; --lcd-hot: #5a1a8a;
+  --ink: #ffffff; --key: radial-gradient(circle at 35% 25%, #ffffff 0%, #d0c0f8 35%, #7a5ad0 72%, #3a2880 100%); --key-ink: #1a1040;
+  --on: radial-gradient(circle at 35% 25%, #fff, #a8e06a 40%, #3f8a12); --on-ink: #10300a;
+  --slot: #17121f; --thumb: radial-gradient(circle at 35% 30%, #fff, #c9b6f6 45%, #5a40b0);
+  --row-b: rgba(0, 0, 0, .07); --row-sel: #1a1e10; --row-sel-ink: #c8d0a0;
+  --glow: none; --shadow: 0 16px 34px rgba(0, 0, 0, .7);
+  --orb-bg: radial-gradient(circle at 35% 30%, #fff, #a8e06a 40%, #2f7a0a 75%, #123004);
+  --key-wide: linear-gradient(180deg, #f4ecff 0%, #c4b0f4 40%, #7a5ad0 58%, #b8a4ee 100%);
+  --note: #1a1e10; --inst: #3a1a8a; --vol: #2a5a10; --fx: #8a1a4a; --par: #5a4410; --sw: #9a7be0;
+}
+/* ---- the box family: winamp7, tracker2 (OctaMED Soundstudio), tracker (OctaMED Pro), tracker7 (SIDMON) */
+body[data-skin="handheld"] {
+  --page: #2a2620; --shell: linear-gradient(180deg, #e9dcae, #cdbd88); --hi: #fff8dc; --lo: #6a5c30;
+  --panel: transparent; --title-bg: linear-gradient(180deg, #d8c890, #b8a868); --title-ink: #4a3c18;
+  --lcd: linear-gradient(180deg, #c9c9b4, #b4b49c); --lcd-ink: #2a2a22; --lcd-dim: #8a8a74; --lcd-hot: #c01818;
+  --ink: #3a3018; --key: linear-gradient(180deg, #f4ecc8, #c8b880); --key-ink: #3a3018; --on: #c01818; --on-ink: #fff8dc;
+  --slot: #5a4e2a; --thumb: linear-gradient(180deg, #fff8dc, #b8a868); --row-b: rgba(0, 0, 0, .06); --row-sel: #2a2a22; --row-sel-ink: #dcdcc4;
+  --glow: none; --shadow: 5px 5px 0 #000; --orb-bg: none;
+  --note: #2a2a22; --inst: #5a3a10; --vol: #1a4a1a; --fx: #c01818; --par: #4a4a3a; --sw: #e9dcae;
+}
+body[data-skin="med"] {
+  --page: #0a4a5a; --shell: #18b4c8; --hi: #b8f4ff; --lo: #064a58; --panel: transparent;
+  --title-bg: #ffffff; --title-ink: #000000;
+  --lcd: #0f9cb0; --lcd-ink: #000000; --lcd-dim: #0a5a68; --lcd-hot: #ffffff;
+  --ink: #000000; --key: #18b4c8; --key-ink: #000000; --on: #ffa8d8; --on-ink: #000000;
+  --slot: #064a58; --thumb: #ffffff; --row-b: rgba(255, 255, 255, .08); --row-sel: #ffffff; --row-sel-ink: #c0207a;
+  --glow: none; --shadow: 4px 4px 0 #021c22; --orb-bg: none;
+  --note: #000000; --inst: #ffffff; --vol: #052a32; --fx: #7a0a4a; --par: #052a32; --sw: #18b4c8;
+}
+body[data-skin="pro"] {
+  --page: #000000; --shell: #a8a8a8; --hi: #ffffff; --lo: #404040; --panel: transparent;
+  --title-bg: #000000; --title-ink: #ffffff;
+  --lcd: #000000; --lcd-ink: #ffffff; --lcd-dim: #808080; --lcd-hot: #40e040;
+  --ink: #000000; --key: #a8a8a8; --key-ink: #000000; --on: #000000; --on-ink: #ffffff;
+  --slot: #404040; --thumb: #ffffff; --row-b: rgba(255, 255, 255, .07); --row-sel: #606878; --row-sel-ink: #ffffff;
+  --glow: none; --shadow: none; --orb-bg: none;
+  --note: #ffffff; --inst: #ffffff; --vol: #40e040; --fx: #e0e040; --par: #e04040; --sw: #a8a8a8;
+}
+body[data-skin="sid"] {
+  --page: #000000; --shell: #c4c4cc; --hi: #ffffff; --lo: #3c5c94; --panel: transparent;
+  --title-bg: #c4c4cc; --title-ink: #14204a;
+  --lcd: #000000; --lcd-ink: #ffffff; --lcd-dim: #6c7ca4; --lcd-hot: #9cb4f0;
+  --ink: #14204a; --key: #c4c4cc; --key-ink: #14204a; --on: #14204a; --on-ink: #ffffff;
+  --slot: #3c5c94; --thumb: #ffffff; --row-b: rgba(156, 180, 240, .09); --row-sel: #c4c4cc; --row-sel-ink: #000000;
+  --glow: none; --shadow: none; --orb-bg: none;
+  --note: #ffffff; --inst: #9cb4f0; --vol: #ffffff; --fx: #9cb4f0; --par: #c4c4cc; --sw: #6c7ca4;
+}
+body[data-skin="sid"] .win { outline: 2px solid #3c5c94; outline-offset: -6px; }      /* (its doubled frames) */
+
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { height: 100vh; overflow: hidden; display: flex; flex-direction: column; background: var(--page, #000) fixed; background-color: #000; color: var(--ink);
+       font: 13px/1.3 var(--font); letter-spacing: .5px; padding: 0 16px 16px; }
+button, select, input { font: inherit; letter-spacing: inherit; color: inherit; }
+.grow { flex: 1; }
+.small { font-size: 12.5px; font-weight: 600; }
+
+/* ---- the hyper skins' backdrop: the sky, a checkerboard floor running to the horizon, the sun on it, chrome
+ * balls that mirror both (the school folders' ray tracing) */
+.scene { display: none; position: fixed; inset: 0; z-index: -1; overflow: hidden; background: var(--sky); perspective: 420px; }
+body[data-family="hyper"] .scene { display: block; }
+.scene .floor { position: absolute; left: -100%; right: -100%; top: 55%; height: 160%; transform-origin: 50% 0; transform: rotateX(74deg);
+                background: repeating-conic-gradient(var(--chk1) 0 25%, var(--chk2) 0 50%) 0 0 / 150px 150px; }
+.scene .haze { position: absolute; left: 0; right: 0; top: 44%; height: 24%; background: linear-gradient(180deg, transparent, var(--haze) 46%, transparent); filter: blur(6px); }
+.scene .sun { position: absolute; left: 62%; top: 30%; width: 46vh; height: 46vh; background: var(--sun); }
+.scene .ball { position: absolute; border-radius: 50%; background: var(--ball); box-shadow: inset -8px -14px 26px rgba(0, 0, 0, .6), 0 0 34px var(--aura), 0 40px 30px -18px rgba(0, 0, 0, .7); }
+.scene .b1 { width: 21vh; height: 21vh; left: 3%; top: 60%; } .scene .b2 { width: 11vh; height: 11vh; left: 31%; top: 76%; }
+.scene .b3 { width: 30vh; height: 30vh; right: -6vh; top: 64%; } .scene .b4 { width: 7vh; height: 7vh; left: 49%; top: 60%; }
+.scene .b5 { width: 14vh; height: 14vh; right: 27%; top: 8%; opacity: .9; }
+
+/* ---- the bar at the top: the mode, the skins */
+.bar { flex: none; display: flex; align-items: center; gap: 14px; padding: 9px 4px 11px; height: 66px; }
+.logo { font: italic 900 34px/1 var(--font-title); letter-spacing: 8px; background: var(--shell); -webkit-background-clip: text; background-clip: text;
+        color: transparent; filter: drop-shadow(0 2px 0 var(--lo)) drop-shadow(0 0 12px var(--aura, rgba(255, 255, 255, .35))); }
+.lamp { width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #f88, #700 60%); box-shadow: inset 0 0 3px #000; flex: none; }
+.lamp.on { background: radial-gradient(circle at 35% 30%, #fff, #6f0 50%, #070); box-shadow: 0 0 12px #6f0; }
+.switch, .tabs { display: inline-flex; flex-wrap: wrap; background: var(--slot); padding: 4px; border-radius: calc(var(--r-s) + 4px); box-shadow: inset 0 2px 5px #000; }
+.switch button, .tabs button { border: 0; background: transparent; color: #ffffff; padding: 5px 13px; border-radius: var(--r-s); cursor: pointer; font-weight: 600; }
+.switch button.on, .tabs button.on { background: var(--on); color: var(--on-ink); opacity: 1; box-shadow: inset 0 2px 2px rgba(255, 255, 255, .7), 0 1px 3px #000; }
+.swatches { display: flex; gap: 6px; }
+.swatches button { width: 22px; height: 22px; border-radius: var(--r-key); border: 2px solid #000; cursor: pointer; padding: 0;
+                   box-shadow: inset 0 3px 3px rgba(255, 255, 255, .7), inset 0 -3px 4px rgba(0, 0, 0, .5); }
+.swatches button.on { border-color: #fff; transform: scale(1.25); }
+
+/* ---- the layout: the window's whole height, nothing scrolls but the lists */
+main { display: none; flex: 1; min-height: 0; gap: 16px; }
+body[data-mode="sampler"] #sampler { display: grid; grid-template-columns: 210px minmax(0, 1.35fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1.3fr) minmax(0, 1fr); }
+.side { grid-row: 1 / 3; display: flex; flex-direction: column; gap: 16px; min-height: 0; }
+#w-main { grid-column: 2; grid-row: 1; } #w-proc { grid-column: 2; grid-row: 2; } #w-pool { grid-column: 3; grid-row: 1 / 3; }
+/* the side column: the FM-1's box takes what the about box leaves, its buttons spread down it (the windows tile) */
+#w-dev { flex: 1; }
+#w-dev .body { justify-content: space-between; gap: 10px; }
+#w-dev .body .btn { flex: 1 1 0; max-height: 64px; min-height: 30px; }
+#w-about { flex: none; }
+
+/* ---- a window: a shell with its bezel, a title on a tab, two orbs at its shoulders */
+.win { position: relative; display: flex; flex-direction: column; min-height: 0; background: var(--shell); border-radius: var(--r-mid); padding: var(--bezel);
+       box-shadow: inset 0 3px 2px var(--hi), inset 0 -5px 8px var(--lo), var(--shadow); border: var(--edge) solid; border-color: var(--hi) var(--lo) var(--lo) var(--hi); }
+.win.top { border-radius: var(--r-top); }
+.win.bot { border-radius: var(--r-bot); }
+.side .win { border-radius: var(--r-side); }
+.win::before, .win::after { content: ""; position: absolute; top: 9px; width: var(--orb); height: var(--orb); border-radius: 50%; background: var(--orb-bg);
+                            box-shadow: inset 0 -3px 5px rgba(0, 0, 0, .55), 0 2px 4px rgba(0, 0, 0, .6); z-index: 2; }
+.win::before { left: 30px; } .win::after { right: 30px; }
+.side .win::before, .side .win::after { display: none; }
+.win h2 { margin: calc(var(--bezel) * -1) 0 8px; text-align: center; font: 11px/1 var(--font-title); position: relative; z-index: 3; }
+.win h2 span { display: inline-block; background: var(--title-bg); color: var(--title-ink); padding: 6px 22px 7px; letter-spacing: 3px; border-radius: var(--title-r);
+               box-shadow: inset 0 -2px 3px rgba(0, 0, 0, .35), 0 2px 3px rgba(0, 0, 0, .4); }
+body[data-family="box"] .win h2 { margin: 0 0 4px; }
+body[data-family="box"] .win h2 span { display: block; box-shadow: none; padding: 3px 0; }
+.win .body { flex: 1; min-height: 0; background: var(--panel); border-radius: var(--r-s); padding: 10px; display: flex; flex-direction: column; gap: 9px; }
+.row { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; flex: none; }
+.row.tight { gap: 5px; }
+.help { margin: 0; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+/* what the mouse is over does: across the top bar, between the name and the skins, at the buttons' size; it shows
+ * while there is something to tell. Its box never changes size; its font is the largest the longest help fits at
+ * (masif.js sizeHelp), the same for every help: nothing on the page moves when one shows */
+.tip { flex: 1; min-width: 0; height: 46px; display: flex; align-items: center; margin: 0 6px; padding: 4px 14px; font-size: 13px;
+       line-height: 1.35; font-weight: 600; background: var(--lcd); color: var(--lcd-ink); border-radius: var(--r-s);
+       box-shadow: inset 0 2px 6px rgba(0, 0, 0, .6); overflow: hidden; overflow-wrap: anywhere; opacity: 0; transition: opacity .12s; }
+.tip.on { opacity: 1; }
+
+/* ---- the hyper family's windows: fat curved metal, a groove and a second lip round the glass, glow behind, and
+ * the shapes: the display an oval, the pool a capsule, the process a riveted box, the side boxes pods */
+body[data-family="hyper"] .win { box-shadow: inset 0 0 0 2px var(--hi), inset 0 10px 14px -4px var(--hi), inset 0 -16px 22px -6px var(--lo), inset 0 0 0 calc(var(--bezel) - 7px) rgba(255, 255, 255, .06),
+                                 0 0 0 2px var(--lo), 0 0 46px var(--aura), var(--shadow); }
+body[data-family="hyper"] .win .body { border: 4px solid var(--rim); box-shadow: 0 0 0 3px var(--hi), 0 0 0 5px var(--lo), inset 0 0 34px rgba(255, 255, 255, .16), inset 0 12px 26px -10px rgba(255, 255, 255, .5);
+                                       backdrop-filter: blur(7px) saturate(1.5); -webkit-backdrop-filter: blur(7px) saturate(1.5); }
+body[data-family="hyper"] .win h2 { margin-top: calc(var(--bezel) * -1 - 10px); font-size: 12px; }
+body[data-family="hyper"] .win h2 span { padding: 8px 30px 9px; text-shadow: 0 1px 0 rgba(255, 255, 255, .6); box-shadow: 0 0 0 3px var(--hi), 0 0 0 6px var(--lo), 0 0 22px var(--aura), inset 0 -6px 8px rgba(0, 0, 0, .3); }
+body[data-family="hyper"] .win::before, body[data-family="hyper"] .win::after { top: -10px; box-shadow: inset -4px -7px 12px rgba(0, 0, 0, .6), 0 0 0 3px var(--lo), 0 0 18px var(--aura), 0 8px 10px rgba(0, 0, 0, .6); }
+body[data-family="hyper"] .win::before { left: 13%; } body[data-family="hyper"] .win::after { right: 13%; }
+body[data-family="hyper"] #w-main { padding: 30px 8.5% 30px; }
+body[data-family="hyper"] #w-main .body { border-radius: 50%; padding: 3.5% 9% 3%; gap: 6px; }
+body[data-family="hyper"] #w-main .hs input { width: 50px; }
+body[data-family="hyper"] #w-main .marks { gap: 3px 6px; }
+/* (no balls at the windows' shoulders: the user, 2026-10-12) */
+body[data-family="hyper"] .win::before, body[data-family="hyper"] .win::after { display: none; }
+body[data-family="hyper"][data-mode="sampler"] #sampler { grid-template-columns: 210px minmax(0, 1.75fr) minmax(0, .82fr); }
+body[data-family="hyper"] #w-main .lcd { border-radius: 60px / 46px; padding: 12px 26px; }
+body[data-family="hyper"] #w-main :is(.keys, .marks) { justify-content: center; }
+body[data-family="hyper"] #w-pool .body { border-radius: 96px / 70px; padding: 26px 22px; }
+body[data-family="hyper"] #w-pool .list { border-radius: 34px; padding: 14px 4px; }
+body[data-family="hyper"] .side .win .body { border-radius: 26px 26px 66px 66px / 26px 26px 50px 50px; padding: 12px 12px 22px; }
+body[data-family="hyper"] :is(.lcd-info i, .fader span, .hs, .sel, .gauge-text, .help) { text-shadow: 0 0 8px var(--aura); }
+
+/* ---- the display */
+.lcd { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--lcd); color: var(--lcd-ink); border-radius: var(--r-s); padding: 9px 12px;
+       box-shadow: inset 0 3px 10px rgba(0, 0, 0, .75), 0 1px 0 var(--hi); overflow: hidden; font-family: var(--font-lcd); }
+.lcd::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(180deg, transparent 0 2px, rgba(0, 0, 0, .13) 2px 3px),
+              linear-gradient(170deg, rgba(255, 255, 255, .22) 0%, transparent 34%); }
+.lcd-top { display: flex; align-items: baseline; gap: 14px; flex: none; }
+.lcd-top b { font-size: 30px; letter-spacing: 2px; text-shadow: var(--glow); }
+.lcd-top span { font-size: 16px; flex: 1; white-space: nowrap; overflow: hidden; text-shadow: var(--glow); }
+.lcd-info { display: flex; gap: 8px; margin: 3px 0 7px; flex: none; font-size: 14px; }
+.lcd-info i { font-style: normal; color: var(--lcd-ink); border: 1px solid var(--lcd-dim); padding: 0 6px; border-radius: calc(var(--r-s) / 2); }
+canvas { display: block; width: 100%; image-rendering: pixelated; }
+/* the wave, and over it its lines: START and END (a ball at the top), the loop's two dotted ones (a ball at the
+ * bottom to grip them by, as a slider's), where PLAY is */
+.wavebox { position: relative; flex: 1; min-height: 0; container-type: size; }
+#wave { position: absolute; inset: 0; width: 100%; height: 100%; filter: drop-shadow(0 0 5px var(--aura, transparent)); }
+.mk { position: absolute; top: 0; width: 16px; margin-left: -8px; z-index: 2; cursor: ew-resize; touch-action: none; }
+.mk::before { content: ""; position: absolute; left: 7px; width: 0; border-left: 2px solid var(--lcd-hot); }
+.mk::after { content: ""; position: absolute; left: 1px; width: 14px; height: 14px; border-radius: var(--r-key); background: var(--thumb);
+             box-shadow: inset 0 -2px 3px rgba(0, 0, 0, .45), 0 1px 3px rgba(0, 0, 0, .8); }
+.mk.edge { bottom: 0; width: 20px; margin-left: -10px; }          /* START, END: solid, a ball at the top to grip */
+.mk.edge::before { left: 9px; top: 0; bottom: 0; }
+.mk.edge::after { top: 0; left: 1px; width: 18px; height: 18px; }
+.mk.loop { top: auto; bottom: 0; height: 18px; width: 20px; margin-left: -10px; }
+.mk.loop::before { left: 8px; bottom: 14px; height: calc(100cqh - 14px); width: 3px; border: 0;
+                   background: repeating-linear-gradient(180deg, var(--lcd-hot) 0 11px, transparent 11px 17px); }
+.mk.taper { top: calc(50cqh - 8px); height: 16px; width: 16px; margin-left: -8px; z-index: 3; }
+.mk.taper::before { left: 7px; top: calc(8px - 50cqh); height: 100cqh; width: 2px; border: 0;
+                    background: repeating-linear-gradient(180deg, var(--lcd-hot) 0 3px, transparent 3px 7px); }
+.mk.taper::after { left: 2px; top: 2px; width: 12px; height: 12px; }
+.mk.loop::after { left: 1px; bottom: 0; width: 18px; height: 18px; }
+.mk.on::after, .mk:hover::after { filter: brightness(1.3); box-shadow: 0 0 10px var(--lcd-hot), 0 1px 3px rgba(0, 0, 0, .8); }
+.ph { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--lcd-ink); box-shadow: 0 0 6px var(--lcd-ink); pointer-events: none; display: none; }
+#w-scroll { flex: none; width: 100%; margin-top: 5px; position: relative; z-index: 1; }
+.dim { opacity: .35; pointer-events: none; }
+.hs output { min-width: 16px; text-align: right; margin-right: 8px; }
+.key.rec.on { animation: rec 1s steps(2) infinite; }
+@keyframes rec { 50% { filter: brightness(1.8); } }
+body.busy { cursor: progress; }
+body.busy :is(.btn, .chip, .key) { pointer-events: none; }
+body.dropping #sampler { outline: 3px dashed var(--lcd-hot); outline-offset: -6px; }
+button:disabled { opacity: .45; cursor: default; }
+
+/* ---- keys, chips, buttons */
+.key, .btn, .chip { border: var(--edge) solid; border-color: var(--hi) var(--lo) var(--lo) var(--hi); background: var(--key); color: var(--key-ink); cursor: pointer;
+                    box-shadow: inset 0 2px 3px rgba(255, 255, 255, .65), inset 0 -3px 5px rgba(0, 0, 0, .35), 0 2px 4px rgba(0, 0, 0, .55); text-shadow: 0 1px 2px rgba(0, 0, 0, .7); }
+body[data-family="box"] :is(.key, .btn, .chip) { box-shadow: none; text-shadow: none; }
+body[data-family="hyper"] .key:not(.big) { box-shadow: inset -4px -7px 12px rgba(0, 0, 0, .55), 0 0 0 3px var(--lo), 0 0 0 5px var(--hi), 0 0 16px var(--aura), 0 6px 8px rgba(0, 0, 0, .6); }
+.key { width: var(--key-size); height: var(--key-size); border-radius: var(--r-key); font-size: 15px; flex: none; }
+.key:not(.big) { display: grid; place-items: center; padding: 0; }      /* (its sign is a drawing: in the exact middle) */
+.key svg { width: 46%; height: 46%; fill: currentColor; display: block; }
+.key.big { width: auto; height: 36px; border-radius: calc(var(--r-s) + 4px); padding: 0 12px; font-size: 11px; }
+.key.rec { color: #ff3050; }
+.btn, .chip, .key.big { background: var(--key-wide, var(--key)); }
+.btn { border-radius: calc(var(--r-s) + 4px); padding: 8px 12px; }
+.side .btn { width: 100%; }
+.chip { border-radius: var(--r-s); padding: 3px 10px; font-size: 12px; font-weight: 600; }
+.chip.on, .btn.hot { background: var(--on); color: var(--on-ink); text-shadow: none; }
+.key.loopk.on { background: var(--on); color: var(--on-ink); }        /* (the loop key, lit while LOOP is on) */
+.key:hover, .btn:hover, .chip:hover { filter: brightness(1.18); }
+.key:active, .btn:active, .chip:active { transform: translateY(1px); filter: brightness(.85); }
+.hs { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; }
+.hs input { width: 64px; }
+.sel { font-size: 12px; font-weight: 600; display: inline-flex; gap: 4px; align-items: center; }
+select { background: var(--lcd); color: var(--lcd-ink); border: 1px solid var(--lo); border-radius: calc(var(--r-s) / 2); padding: 2px 4px; }
+
+/* ---- sliders: a slot and a ball (or, boxy, a cap) */
+input[type="range"] { -webkit-appearance: none; appearance: none; background: transparent; margin: 0; cursor: pointer; }
+input[type="range"]::-webkit-slider-runnable-track { height: 6px; background: var(--slot); border-radius: 3px; box-shadow: inset 0 1px 3px #000; }
+input[type="range"]::-moz-range-track { height: 6px; background: var(--slot); border-radius: 3px; box-shadow: inset 0 1px 3px #000; }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; margin-top: -7px; border: 0; border-radius: var(--r-key); background: var(--thumb);
+                                            box-shadow: inset 0 -2px 3px rgba(0, 0, 0, .45), 0 2px 3px rgba(0, 0, 0, .7); }
+input[type="range"]::-moz-range-thumb { width: 20px; height: 20px; border: 0; border-radius: var(--r-key); background: var(--thumb);
+                                        box-shadow: inset 0 -2px 3px rgba(0, 0, 0, .45), 0 2px 3px rgba(0, 0, 0, .7); }
+/* PROCESS's faders: as long as the window lets them be, a big cap, the value over it and the name under it large */
+.faders { flex: 1; min-height: 0; display: flex; gap: 6px; background: var(--slot); border-radius: var(--r-s); padding: 12px 10px 10px; justify-content: space-between; box-shadow: inset 0 3px 8px #000; }
+.fader { display: flex; flex-direction: column; align-items: center; gap: 7px; color: #ffffff; font-size: 13px; font-weight: 700; flex: 1; min-height: 0; }
+.fader input { writing-mode: vertical-lr; direction: rtl; flex: 1; min-height: 30px; height: 0; width: 34px; }
+.fader input::-webkit-slider-runnable-track { width: 10px; height: 100%; border-radius: 5px; }
+.fader input::-moz-range-track { width: 10px; height: 100%; border-radius: 5px; }
+.fader input::-webkit-slider-thumb { width: 32px; height: 22px; margin-top: 0; margin-left: -11px; }
+.fader input::-moz-range-thumb { width: 32px; height: 22px; }
+.fader output { color: var(--lcd-hot); background: var(--lcd); padding: 2px 6px; min-width: 56px; text-align: center; border-radius: 4px; font-family: var(--mono); font-size: 15px; font-weight: 700; }
+body:is([data-skin="chrome"], [data-skin="gadget"], [data-skin="handheld"], [data-skin="med"]) .fader output { color: var(--lcd-ink); }
+
+/* ---- the list (the playlist's place), and the gauge over it */
+.list { flex: 1; min-height: 0; list-style: none; margin: 0; padding: 4px 0; background: var(--lcd); color: var(--lcd-ink); border-radius: var(--r-s); overflow-y: auto;
+        box-shadow: inset 0 3px 10px rgba(0, 0, 0, .75); scrollbar-width: thin; scrollbar-color: var(--lcd-dim) transparent; font: 13px/1.45 var(--font-grid); }
+body[data-family="box"] .list { font-size: 18px; line-height: 1.1; }
+.list li { display: flex; gap: 8px; padding: 1px 12px; cursor: pointer; align-items: center; }
+.list li:nth-child(even) { background: var(--row-b); }
+.list li.off { color: color-mix(in srgb, var(--lcd-ink) 62%, var(--lcd-dim)); }     /* (unticked: quieter, still readable) */
+.list li.sel { background: var(--row-sel); color: var(--row-sel-ink); display: flex; gap: 8px; font: inherit; }     /* (not the labels' .sel) */
+.list li span { white-space: nowrap; flex: none; }
+.list li .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.list li .slot { width: 54px; }
+.tick { width: 13px; height: 13px; border: 1px solid currentColor; border-radius: calc(var(--r-key) / 3); display: inline-block; flex: none; position: relative; }
+.tick.on::after { content: ""; position: absolute; inset: 2px; background: currentColor; border-radius: inherit; }
+.gauge { flex: 1; }
+.gauge-bar { height: 16px; background: var(--lcd); border-radius: 8px; overflow: hidden; box-shadow: inset 0 2px 4px #000; }
+body[data-family="box"] .gauge-bar { border-radius: 0; }
+.gauge-bar div { height: 100%; width: 0; background: var(--lcd-ink); box-shadow: inset 0 3px 3px rgba(255, 255, 255, .6), 0 0 14px var(--aura, transparent); }
+.gauge.full .gauge-bar div { background: #ff3050; }
+.gauge-text { font-size: 12px; font-weight: 600; margin-top: 3px; text-align: right; }
+.gauge.no { animation: no .35s; }
+@keyframes no { 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+
+/* ---- VT323 is a small face: the box skins' display takes it bigger */
+body[data-family="box"] .lcd-top b { font-size: 44px; line-height: 1; }
+body[data-family="box"] .lcd-top span { font-size: 24px; }
+body[data-family="box"] .lcd-info { font-size: 17px; }
+
+/* ---- the hyper sampler's round keys: the sign big and bright on a dark lens in the middle of the ball, so it
+ * reads against the reflection (the user, 2026-10-12) */
+body[data-family="hyper"] .key:not(.big) { color: #fff; --key-size: 62px;
+    background: radial-gradient(circle, rgba(0, 0, 0, .86) 0 47%, rgba(0, 0, 0, .35) 52%, transparent 58%), var(--key); }
+body[data-family="hyper"] .key:not(.big) svg { width: 52%; height: 52%; filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 5px var(--aura)) drop-shadow(0 0 9px var(--aura)); }
+body[data-family="hyper"] .key.rec:not(.big) svg { filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 6px #ff2848) drop-shadow(0 0 11px #ff2848); }
+body[data-family="hyper"] .key.rec:not(.big) { color: #ff2848; }
+body[data-family="hyper"] .key.loopk.on:not(.big) { color: var(--lcd-hot); background: radial-gradient(circle, rgba(0, 0, 0, .86) 0 47%, rgba(0, 0, 0, .35) 52%, transparent 58%), var(--on); }
+body[data-family="hyper"] .key.loopk.on:not(.big) svg { filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 6px var(--lcd-hot)) drop-shadow(0 0 11px var(--lcd-hot)); }
+/* PROCESS: its switches in the bottom row with the rate and the buttons, so the faders have the height */
+.procbar .btn { padding: 6px 12px; }
+.procbar .chip { font-size: 13px; padding: 5px 12px; }
+/* the sampler window under the wave (the user, 2026-10-15): one row of keys, a bit bigger than before, then SOURCE
+ * at the left as wide as its longest choice. The keys that go round values (ZOOM, SPEED, BITS, RATE) show their
+ * name small and the value large, lit off their first value */
+.deck { flex: none; display: flex; flex-direction: column; gap: 8px; }
+.deck .keys { display: flex; gap: 6px; align-items: center; }
+.deck .keys .key { flex: 1 1 0; width: auto; min-width: 38px; max-width: 58px; height: 50px; }
+.deck .keys .key svg { width: 52%; height: 52%; }
+.key.cyc { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 0; line-height: 1; }
+.key.cyc small { font-size: 9px; font-weight: 700; letter-spacing: .5px; opacity: .85; }
+.key.cyc b { font-size: 14px; }
+.key.on { background: var(--on); color: var(--on-ink); }
+.key.arm.on { background: var(--arm); color: #fff; }
+.key.dim { opacity: .35; }
+.srcrow { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; }
+.srcrow select { width: auto; font-size: 13px; padding: 3px 6px; }
+.fader span { white-space: nowrap; }                    /* (FADE OUT on one line, as FADE IN) */
+.deck .keys .key { height: 36px; }
+body[data-skin="med"] { --arm: #ff2f7d; }
+body[data-skin="handheld"] { --arm: #c01818; }
+body[data-skin="pro"] { --arm: #ff3030; }
+body[data-skin="sid"] { --arm: #ff9a3c; }
+
+/* the CONFIRM CLEAR pop-up: a window of the skin over the page */
+dialog.win { margin: auto; border: 0; color: var(--ink); width: min(380px, calc(100vw - 32px)); max-height: none; }
+dialog.win:not([open]) { display: none; }
+dialog.win::backdrop { background: rgba(0, 0, 0, .6); }
+
+/* ---- the GUIDE tab (the user, 2026-10-24): the contents at the left, the text on the skin's display colours in one
+ * window that scrolls; its drawings are in the text's colours (currentColor, --lcd-hot), so every skin has them */
+.bar .switch { flex: none; }
+body[data-mode="guide"] #guide { display: grid; grid-template-columns: 230px minmax(0, 1fr); }
+#guide .side .win { flex: 1; }
+.toc { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.toc a { color: inherit; text-decoration: none; padding: 5px 9px; border-radius: var(--r-s); font-weight: 600; font-size: 12.5px; }
+.toc a:hover, .toc a.on { background: var(--on); color: var(--on-ink); }
+#w-guide .body { padding: 6px; }
+.guide { position: relative; flex: 1; min-height: 0; overflow-y: auto; background: var(--lcd); color: var(--lcd-ink); border-radius: var(--r-s); padding: 18px 28px 40px;
+         font: 14px/1.6 var(--mono); letter-spacing: 0; box-shadow: inset 0 3px 10px rgba(0, 0, 0, .55); scrollbar-width: thin; scrollbar-color: var(--lcd-dim) transparent; }
+.guide > * { max-width: 900px; }
+.guide h1 { font: 19px/1.3 var(--font-title); letter-spacing: 2px; margin: 34px 0 10px; padding-bottom: 5px; border-bottom: 2px solid var(--lcd-dim); scroll-margin-top: 10px; }
+.guide h1:first-child { margin-top: 0; }
+.guide p, .guide ul, .guide ol { margin: 0 0 10px; }
+.guide ul, .guide ol { padding-left: 24px; }
+.guide li { margin: 3px 0; }
+.guide code, .guide pre { font-family: var(--mono); background: color-mix(in srgb, var(--lcd-ink) 12%, transparent); border-radius: 4px; }
+.guide code { padding: 0 4px; }
+.guide pre { padding: 8px 12px; margin: 6px 0; overflow-x: auto; white-space: pre; line-height: 1.45; }
+.guide .note, .guide .warn { margin: 0 0 12px; padding: 6px 12px; border-left: 4px solid var(--lcd-hot); background: color-mix(in srgb, var(--lcd-ink) 8%, transparent); }
+.guide .warn p { margin: 4px 0; }
+.guide table { border-collapse: collapse; margin: 6px 0 12px; }
+.guide th, .guide td { border: 1px solid var(--lcd-dim); padding: 4px 10px; text-align: left; vertical-align: top; }
+.guide th { white-space: nowrap; }
+.guide table.nums td { text-align: right; }
+.guide .src { opacity: .75; font-size: 12.5px; white-space: nowrap; }
+.guide figure { margin: 14px 0; }
+.guide figcaption { font-size: 12.5px; opacity: .8; text-align: center; margin-top: 4px; }
+.fig { display: block; width: 100%; max-width: 640px; height: auto; margin: 0 auto; }
+.fig.small { max-width: 420px; }
+.fig text { fill: currentColor; font-family: var(--mono); }
+.fig .f-t { font-size: 18px; font-weight: 700; } .fig .f-s { font-size: 13px; font-weight: 700; } .fig .f-xs, .fig .f-xs text { font-size: 11.5px; }
+.fig .f-line, .fig .f-line rect { fill: none; stroke: currentColor; stroke-width: 2; }
+.fig .f-soft, .fig .f-soft rect { fill: color-mix(in srgb, currentColor 18%, transparent); stroke: none; }
+.fig .f-hot { fill: var(--lcd-hot); } .fig .f-on { fill: var(--lcd); } .fig .f-ink { fill: currentColor; }
+.fig .f-lcd { fill: color-mix(in srgb, currentColor 6%, transparent); stroke: currentColor; stroke-width: 1.5; }
+.fig .f-wave { fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
+.fig .f-loop { fill: color-mix(in srgb, var(--lcd-hot) 16%, transparent); }
+.fig .f-mark { stroke: var(--lcd-hot); stroke-width: 2.5; } .fig .f-dash { stroke-dasharray: 10 6; } .fig .f-dot { stroke-dasharray: 3 4; }
+.fig .f-ball { fill: currentColor; stroke: var(--lcd-hot); stroke-width: 2; }
+.fig .f-arrow { fill: none; stroke: var(--lcd-hot); stroke-width: 3; } .fig .f-head { fill: var(--lcd-hot); }
+.fig .f-num circle { fill: var(--lcd-hot); } .fig .f-numt text { fill: var(--lcd); font-size: 13px; font-weight: 700; text-anchor: middle; }
+.bars { max-width: 640px; margin: 0 auto; }
+.bars .tbar { display: grid; grid-template-columns: 190px minmax(0, 1fr) 64px; align-items: center; gap: 10px; margin: 5px 0; }
+.bars .tbar i { display: block; height: 14px; width: var(--w); background: var(--lcd-ink); border-radius: 3px; }
+.bars .tbar b { text-align: right; }
+@media (max-width: 760px) {
+  body[data-mode="guide"] #guide { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  #guide .side { grid-row: auto; }
+  #guide .side .win, #w-toc .body { flex: none; }
+  #guide .toc { flex: none; flex-direction: row; flex-wrap: wrap; max-height: 104px; }
+  body[data-mode="guide"] .bar { height: auto; flex-wrap: wrap; }
+  body[data-mode="guide"] .tip { display: none; }
+  .guide { padding: 14px 16px 30px; }
+  .bars .tbar { grid-template-columns: 120px minmax(0, 1fr) 54px; font-size: 12px; }
+}
+
+/* the FM-1 drawn in the guide's controls section: what MASIF uses labelled, the rest faint, the arrows and the
+ * commands outlined (the user, 2026-10-24: after the box's own line drawing) */
+.fig.fm1 { max-width: 900px; }
+.fig .f-mid { text-anchor: middle; }
+.fig .f-tick { stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; }
+.fig .f-use { font-size: 10.5px; opacity: .85; }
+.fig .f-off { fill: none; stroke: currentColor; stroke-width: 1.5; opacity: .3; }
+.fig .f-key { font-size: 11.5px; font-weight: 700; }
+.fig .f-prn { font-size: 8.5px; opacity: .7; }
+.fig .f-group { fill: none; stroke: var(--lcd-hot); stroke-width: 2.5; stroke-dasharray: 7 4; stroke-linejoin: round; }
+.fig .f-hotx { fill: var(--lcd-hot); }
+.fig .f-soft2 { fill: color-mix(in srgb, currentColor 14%, transparent); stroke: currentColor; stroke-width: 1.5; }
+/* the sampler's ABOUT box: the credits short, a link to the guide's */
+#w-about .about { gap: 6px; }
+#w-about .help { font-size: 11px; line-height: 1.4; }
+#w-about .guide-link { color: inherit; font-weight: 700; text-decoration: underline; }
+.guide a { color: inherit; font-weight: 700; }

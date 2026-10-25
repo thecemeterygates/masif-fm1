@@ -1,0 +1,705 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+/* zp12: a 12-bit sampling drum machine for the M-VAVE FM-1. One compilation unit: the HAL (header-only),
+ * the platform of SLOOP / Felucca as sloopDX carries it (boot guard, USB-MIDI, the M-UPGRADE updater and the
+ * USB rescue, so the web installer always reaches the FM-1), the sound core (sp_core.c), the factory kit
+ * (build/gen/zp12_kit.h, tools/gen_kit.py) and the panel (sp_ui.c). */
+#include <stdint.h>
+#include "fm1_time.h"
+#include "fm1_sys.h"
+#include "fm1_irq.h"
+#include "fm1_guard.h"
+#include "fm1_input.h"
+#include "fm1_timer.h"
+#include "fm1_lcd_hw.h"
+#include "fm1_audio.h"
+#include "fm1_adc.h"
+#include "bootguard.h"
+
+bootguard_t bootguard __attribute__((section(".noinit")));
+static volatile uint32_t fm1_ms;
+
+#define RING_PUBLISH() __asm__ volatile("" ::: "memory")   /* (as sloopDX core.h) */
+#include "libc.c"
+#include "lcd.c"
+#define CV_MAX (232u * 80u)                    /* the biggest region: the faders */
+#include "gfx.c"
+
+#define FELUCCA_OTA 1
+#define FELUCCA_CDC 0
+#ifndef FELUCCA_UAC
+#define FELUCCA_UAC MASIF_ENABLE_TRACKER          /* USB audio both ways (MASIF, 2026-10-23: usb.c, uo.h from Ketch) */
+#endif
+#define FELUCCA_UART 0
+#ifndef FELUCCA_UAC_48K
+#define FELUCCA_UAC_48K 0                       /* 44.1 kHz only: what macOS took (usb.c, the descriptors' comment) */
+#endif
+#define HALF_FRAMES 128u                        /* the I2S half buffer (usb.c's audio rings are sized by it) */
+#define HALF_WORDS (HALF_FRAMES * 2u)
+#ifndef FELUCCA_ID
+#define FELUCCA_ID "FM-1_970"                   /* package identity: 97N = zp12 build N */
+#endif
+#include "usb.c"
+#if FELUCCA_UAC_OUT
+#if MASIF_ENABLE_TRACKER
+static void mr_usb(uint32_t at, uint32_t n);
+static void uo_rec(uint32_t at, uint32_t n) { mr_usb(at, n); }   /* (uo.h's hook: MASIF's recorder, masif_rec.c) */
+#else
+static void uo_rec(uint32_t at, uint32_t n) { (void)at; (void)n; }
+#endif
+#endif
+
+/* ---- flash: read anywhere, erase / program only the update's staging area (saving comes later) */
+/* (the app writes Felucca's store, the update staging and, for the web tools, the free rooms above it:
+ * 0xE5000..0xE8FFF and 0xEA000..0xFBFFF; sp_link.c narrows that to zp12's own and sloopDX's banks) */
+#ifndef MASIF_ENABLE_TRACKER
+#define MASIF_ENABLE_TRACKER 0
+#endif
+#if MASIF_ENABLE_TRACKER && MASIF_UI
+#define MASIF_APP_ROOM 1        /* MASIF: the app area past the image is sample room too (sp_samples.c; the user, 2026-10-21) */
+#else
+#define MASIF_APP_ROOM 0
+#endif
+#if MASIF_APP_ROOM
+static uint32_t masif_app_lo;   /* the first sector past the image (its marker; the samples after it), 0 until known */
+#define MASIF_APP_HI 0x92000u   /* (the slot ends at 0x920DC: that sector is not ours) */
+#define FL_APP_OK(off, n) (masif_app_lo && FL_IN(off, n, masif_app_lo, MASIF_APP_HI))
+#else
+#define FL_APP_OK(off, n) 0
+#endif
+#if MASIF_ENABLE_TRACKER    /* MASIF: also the data flash's first four sectors (no other firmware's saves to keep: sp_link.c) */
+#define FL_RANGE_OK(off, n) (FL_STORE_OK(off, n) || FL_IN(off, n, FL_OTA_LO, 0xE9000u) || FL_IN(off, n, 0xEA000u, 0xFC000u) || \
+                             FL_IN(off, n, 0x93000u, 0x97000u) || FL_APP_OK(off, n))
+#else
+#define FL_RANGE_OK(off, n) (FL_STORE_OK(off, n) || FL_IN(off, n, FL_OTA_LO, 0xE9000u) || FL_IN(off, n, 0xEA000u, 0xFC000u))
+#endif
+#include "fm1_flash.h"
+static uint8_t flash_ok;
+static int st_read(uint32_t off, void *dst, uint32_t n)
+{
+    uint8_t *d = dst;
+    while (n) {
+        uint32_t k = n > 256u ? 256u : n, f = irq_save();
+        int rc = FL_FAR(fl_read_ram)(off, d, k);
+        irq_restore(f);
+        if (rc)
+            return rc;
+        off += k;
+        d += k;
+        n -= k;
+    }
+    return 0;
+}
+/* the sound: ALNK0 I2S, two halves of 128 frames (fm1_alnk0_irq below) */
+static int32_t abuf[2u * HALF_WORDS] __attribute__((aligned(4)));
+static int fl_erase4k_quiet(uint32_t off, uint32_t *took)
+{
+    uint32_t f = irq_save();
+    int rc;
+#if MASIF_ENABLE_TRACKER                        /* (the I2S plays its halves over and over while the interrupts are off */
+    memset(abuf, 0, sizeof abuf);               /* for the erase, ~45 ms: silence, not a buzz) */
+#endif
+    rc = FL_FAR(fl_erase4k_ram)(off, took);
+    irq_restore(f);
+    return rc;
+}
+
+static uint8_t recovery_active;
+#define OTA_IDENTITY (recovery_active ? "FM-1_000" : FELUCCA_ID)
+#include "ota.c"
+static void recovery_poll(void);
+static uint32_t ota_now_ms(void) { return fm1_ms; }
+static void ota_idle(void)
+{
+    fm1_wdt_feed();
+    if (recovery_active) recovery_poll();
+}
+static int ota_in_area(uint32_t off, uint32_t n) { return FL_IN(off, n, OTA_AREA, OTA_AREA + OTA_AREA_LEN); }
+static int ota_erase(uint32_t off)
+{
+    uint32_t took;
+    if (!ota_in_area(off, 0x1000u) || (off & 0xFFFu))
+        return -8;
+    return fl_erase4k_quiet(off, &took);
+}
+static int ota_prog(uint32_t off, const void *p, uint32_t n)
+{
+    if (!ota_in_area(off, n))
+        return -8;
+    return fl_write(off, p, n);
+}
+static int ota_fread(uint32_t off, void *p, uint32_t n) { return st_read(off, p, n); }
+static void ota_show(uint32_t step, int32_t code)
+{
+    static const char *const STEP[] = {"", "PACKAGE", "CHECK HEAD", "LOADER", "CONFIRM", "RESTART"};
+    if (recovery_active) return;
+    lcd_fill(0, 0, 240, 240, C_BLACK);
+    draw_text_box(0, 92, 240, &FONT_S, "UPDATE", C_WHITE, 1);
+    if (step < 9u)
+        draw_text_box(0, 124, 240, &FONT_S, STEP[step < 6u ? step : 0], C_WHITE, 1);
+    else
+        draw_text_box(0, 124, 240, &FONT_S, code == 1 ? "DRY RUN OK" : "FAILED", C_WHITE, 1);
+    (void)code;
+}
+static void ota_commit(const uint8_t *parm)
+{
+    bootguard_clear(&bootguard);
+    usb_detach();
+    fm1_delay_ms(30);
+    fm1_enter_update(parm);
+}
+#include "recovery.c"
+
+#define SP_WITH_FX 1
+#include "sp_core.c"
+#include "sp_fx.c"
+#include "zp12_kit.h"
+#if MASIF_ENABLE_TRACKER && defined(MASIF_UI) && MASIF_UI
+#define SQ_NSEG 1u                              /* MASIF's screens: the drum sequencer is only the clock (nothing records */
+#define SQ_MAXEV 8u                             /* into it): one loop of a few events, not 16 of 512 (~68 KB of RAM back) */
+#endif
+#include "sp_seq.c"
+#ifndef MASIF_ENABLE_TRACKER
+#define MASIF_ENABLE_TRACKER 0
+#endif
+#if MASIF_ENABLE_TRACKER
+#include "masif_tracker.c"
+#include "masif_runtime.c"
+#include "masif_songfile.c"                     /* (no caller yet: the linker drops it) */
+#ifndef MASIF_DEMO_SONG
+#define MASIF_DEMO_SONG 0
+#endif
+#if MASIF_DEMO_SONG
+#include "masif_demo.c"
+#endif
+#include "masif_fm1_adapter.c"
+#ifndef MASIF_SONG_STORE
+#define MASIF_SONG_STORE 1                      /* 0: no songs on the device (the factory kit leaves no room for it) */
+#endif
+#if MASIF_SONG_STORE
+#include "masif_store.c"
+#define MASIF_TRANSPORT_STOPPED() (!sq.playing)
+#include "masif_fm1_store.c"
+#endif
+#endif
+#include "sp_punch.c"
+/* pad hits go to the audio ISR as requests (sp_seq.c sq_post): sounded, and recorded when REC */
+#define SP_HIT(k, vel, semis) sq_post(RQ_HIT, k, (vel) | (uint32_t)((semis) + 64) << 8)
+#include "sp_ui.c"
+#if MASIF_ENABLE_TRACKER
+#ifndef MASIF_UI
+#define MASIF_UI 0                              /* 1: MASIF's screens and controls are the machine's (masif_main below): zp12's
+                                                 * drum machine is not to be seen or played. 0: zp12's, the tracker beside it */
+#endif
+#define MU_WAVE_NAME(w) wave_name(w)            /* (a sample's name: the kit's, or the web editor's) */
+/* the sound's load (fm1_alnk0_irq: its time a half buffer, of the 2.9 ms it has) and the buttons the start saw */
+static volatile uint32_t au_avg, au_peak;       /* (TIMER4 ticks: the mean, the longest since the screen looked) */
+static uint32_t boot_keys;
+#define AU_BUDGET (HALF_FRAMES * 24000000u / 44100u)
+static uint32_t au_load(int peak)
+{
+    static uint32_t shown, t;
+    if (!peak) return au_avg * 100u / AU_BUDGET;
+    if ((uint32_t)(fm1_ms - t) >= 1000u) { t = fm1_ms; shown = au_peak; au_peak = 0; }
+    return shown * 100u / AU_BUDGET;
+}
+#define MU_LOAD(peak) au_load(peak)
+/* the recorder's save (masif_rec.c MR_HUSH): the sound faded out over a half buffer, and in again; MR_HUSHED once
+ * both halves are silent, so what the I2S loops while the interrupts are off is nothing */
+static volatile uint8_t au_hush, au_silent;
+static int32_t au_g = 256;
+#define MR_HUSH(on) (au_hush = (uint8_t)!!(on))
+#define MR_HUSHED() (au_silent >= 2u)
+#define MU_BOOT_KEYS() boot_keys
+#include "masif_ui.c"
+#endif
+#include "sp_store.c"
+#include "sp_samples.c"
+#include "sp_link.c"
+#if MASIF_ENABLE_TRACKER
+#include "masif_rec.c"                          /* the pool kept by the FM-1, the recorder (after sp_samples.c) */
+#endif
+
+/* ---- the timer: 10 kHz key scan, milliseconds, USB at 2 kHz */
+void fm1_timer5_irq(void)
+{
+    static uint32_t sub, last, acc;
+    uint32_t t0 = fm1_ticks();
+    fm1_timer5_ack();
+    fm1_input_tick();
+    acc += t0 - last;
+    last = t0;
+    while (acc >= 1000u * FM1_TICKS_PER_US) {
+        acc -= 1000u * FM1_TICKS_PER_US;
+        fm1_ms++;
+    }
+    if (sub % 5u == 0u)
+        usb_poll();
+    if (++sub == 10u)
+        sub = 0;
+}
+extern void isr_timer5(void);
+
+/* ---- the sound: sp_render in blocks of 32, the MASTER knob, Q15 -> 24 bit (abuf: above) */
+static volatile int32_t master_q12 = 2048;
+
+void fm1_alnk0_irq(void)                       /* via isr_alnk0 (hal/fm1_isr.S) */
+{
+    uint8_t p = fm1_audio_pending();
+    fm1_audio_ack_aux(p);
+    if (p & FM1_AUDIO_HALF) {
+        int32_t *o = &abuf[fm1_audio_free_half() * HALF_WORDS];
+        uint32_t i, b;
+#if MASIF_ENABLE_TRACKER
+        uint32_t t0 = fm1_ticks();
+#endif
+        for (i = 0; i < HALF_WORDS; i++)
+            o[i] = 0;
+#if FELUCCA_UAC
+        uac_render_start();
+#endif
+        for (b = 0; b < HALF_FRAMES; b += SP_BLK) {
+            sq_block();                                     /* the existing drum sequencer */
+#if MASIF_ENABLE_TRACKER
+            masif_fm1_audio_block();                        /* experimental four-track tracker */
+#endif
+            sp_render(o + 2u * b);
+        }
+#if MASIF_ENABLE_TRACKER
+        sp_master_eq(o, HALF_FRAMES);                       /* the song's 3-band EQ on the whole mix (flat: nothing) */
+        sp_scope_tap(o, HALF_FRAMES);                       /* (for a screen that shows the sound; off: nothing) */
+        mr_mix(o, HALF_FRAMES);                             /* the recorder, if its source is the mix (a bounce) */
+#endif
+#if !(MASIF_ENABLE_TRACKER && MASIF_UI)                 /* (MASIF's screens: no punch-in, its ring not kept) */
+        sp_punch(o, HALF_FRAMES);                           /* FX held + white key 1-4: roll, reverse, tape stop */
+#endif
+#if FELUCCA_UAC
+        if (uac.feed) {                                     /* the computer records the mix as the speaker has it at
+                                                             * full MASTER (sp_out's -6 dB and knee), whatever the knob */
+            int32_t t[2u * SP_BLK];
+            for (b = 0; b < HALF_FRAMES; b += SP_BLK) {
+                for (i = 0; i < 2u * SP_BLK; i++)
+                    t[i] = sp_out(o[2u * b + i]);
+                uac_tap(t, SP_BLK);
+            }
+        }
+#if FELUCCA_UAC_OUT
+        uo_read(o, HALF_FRAMES);                            /* the computer's audio plays through MASTER, after the tap:
+                                                             * not sent back to it */
+#endif
+#endif
+#if MASIF_ENABLE_TRACKER
+        {
+            int32_t g0 = au_g, g1 = au_hush ? 0 : 256, g = g0;   /* (x 256: the << 8; MR_HUSH ramps it over the */
+            const int32_t dg = (g1 - g0) / (int32_t)HALF_FRAMES;  /* half, by 2 a frame) */
+            for (i = 0; i < HALF_WORDS; i++) {
+                o[i] = sp_master(o[i], master_q12) * g;     /* (-6 dB, a soft knee: sp_core.c) */
+                if (i & 1u) g += dg;
+            }
+            au_g = g1;
+            au_silent = (uint8_t)(g0 || g1 ? 0u : au_silent < 2u ? au_silent + 1u : 2u);
+        }
+#else
+        for (i = 0; i < HALF_WORDS; i++) {
+            o[i] = sp_master(o[i], master_q12) << 8;        /* (-6 dB, a soft knee: sp_core.c) */
+        }
+#endif
+#if MASIF_ENABLE_TRACKER
+        {
+            uint32_t dt = fm1_ticks() - t0;                 /* (with the USB timer's turns inside it: the time it took) */
+            au_avg += (uint32_t)((int32_t)(dt - au_avg) / 16);
+            if (dt > au_peak) au_peak = dt;
+        }
+#endif
+        fm1_audio_ack_half();
+    }
+}
+extern void isr_alnk0(void);
+
+/* the USB side, polled from the main loop: the installer's update request, the UBOOT request */
+static void zl_service(void);
+static void fm1_service(void)
+{
+    fm1_wdt_feed();
+    usb_retry(fm1_ms);
+    zl_service();                               /* (the web tools' frames first: ota_service drops the rest) */
+    ota_service();
+    if (usb.ota_req) {
+        usb.ota_req = 0;
+        if (flash_ok)
+            ota_session();                      /* returns only if nothing was committed */
+        ui.force = 1;
+    }
+    if (usb.uboot_req) {
+        fm1_audio_stop();
+        lcd_fill(0, 0, 240, 240, C_BLACK);
+        draw_text_box(0, 110, 240, &FONT_S, "UBOOT (USB)", C_WHITE, 1);
+        usb_detach();
+        fm1_delay_ms(30);
+        bootguard.pending = 0;
+        fm1_enter_uboot();
+    }
+    if ((uint32_t)fm1_ms >= 30000u && bootguard.pending)
+        bootguard_clear(&bootguard);            /* 30 s up: this firmware boots */
+}
+
+static void fm1_fault(const fm1_crash_t *c)
+{
+    char b[12];
+    uint32_t i, t0, v[3] = {c->vec, c->pc, c->rets};
+    fm1_audio_stop();
+    lcd_fill(0, 0, 240, 240, RGB(160, 0, 0));
+    draw_text_box(0, 20, 240, &FONT_S, "ZP12 CRASH", C_WHITE, 1);
+    for (i = 0; i < 3u; i++) {
+        uint32_t k;
+        for (k = 0; k < 8u; k++) b[k] = "0123456789ABCDEF"[(v[i] >> (28u - 4u * k)) & 15u];
+        b[8] = 0;
+        draw_text_box(10, 60 + i * 20, 220, &FONT_S, b, C_WHITE, 0);
+    }
+    t0 = fm1_ticks();
+    while ((uint32_t)(fm1_ticks() - t0) < 8000u * 1000u * FM1_TICKS_PER_US)
+        fm1_wdt_feed();
+    fm1_reboot();
+}
+
+#if MASIF_ENABLE_TRACKER && MASIF_UI
+/* MASIF's main loop, in place of zp12's: the keys, buttons and knobs go to MASIF's screens (masif_ui.c), nothing
+ * reaches zp12's pads, drum sequencer or pages, and zp12's store is not written. What stays as it is: the audio
+ * interrupt, fm1_service (the watchdog, USB, the web tools' link, the updater), the MASTER knob. Never returns. */
+__attribute__((noreturn)) static void masif_main(void)
+{
+    uint32_t prev_notes = fm1_in.notes, t_frame = 0, i;
+    int32_t knob_avg = 512 * 16, d;
+    sq.click = 0;                                       /* the drum sequencer is only the clock: no click, no drum song */
+    sq.song_mode = 0;
+    uint32_t t_boot = fm1_ms, oct_at = 0;
+    masif_ui_init();
+#if MASIF_SONG_STORE
+    if (flash_ok) masif_ui_resume();                    /* where one left off: the page, the cursors, the knobs */
+#endif
+    for (;;) {
+        uint32_t n = fm1_in.notes, down = n & ~prev_notes, up = prev_notes & ~n, rel, b;
+        fm1_service();
+        if ((uint32_t)(fm1_ms - t_boot) < 3000u) {      /* the USB rescue (2026-10-23): recovery_key's 50 ms after power-on */
+            boot_keys |= fm1_in.buttons;                /* saw nothing on this FM-1 (0000), so OCT- alone held a moment */
+            if (!bootguard_manual(fm1_in.buttons)) oct_at = 0;   /* in the first 3 s also counts: the guard asks for */
+            else if (!oct_at) oct_at = fm1_ms | 1u;     /* the rescue and a soft reset (it keeps the guard) gets there */
+            else if ((uint32_t)(fm1_ms - oct_at) >= 400u) {
+                fm1_audio_stop();
+                lcd_fill(0, 0, 240, 240, C_BLACK);
+                draw_text_box(0, 110, 240, &FONT_S, "USB RESCUE", C_WHITE, 1);
+                lcd_sync();
+                bootguard.magic = BOOTGUARD_MAGIC; bootguard.failed = 2; bootguard.pending = 1;
+                fm1_reboot();
+            }
+        }
+        prev_notes = n;
+        for (i = 0; i < 27u; i++) {
+            if ((down >> i) & 1u) masif_ui_key(i, 1);
+            if ((up >> i) & 1u) masif_ui_key(i, 0);
+        }
+        b = fm1_input_edges(&rel);
+        for (i = 0; i < 14u; i++) {
+            if ((b >> i) & 1u) masif_ui_button(i, 1);
+            if ((rel >> i) & 1u) masif_ui_button(i, 0);
+        }
+        for (i = 0; i < FM1_NENC; i++)
+            if ((d = fm1_enc_take(i)) != 0)
+                masif_ui_knob(i, d);
+        mi_r = mi_w;                                    /* (USB MIDI in: nothing listens yet) */
+        masif_ui_tick();                                /* (an arrow held; where one left off kept) */
+        mr_service();                                   /* (the recorder: an erase, the take into the flash) */
+        {   /* the LEDs: what masif_ui_leds says (with MASIF_CONTROLS 0: every button, the keys held or sounding) */
+            uint32_t lb, lk, lg, c, r;
+            uint8_t nl[FM1_NCOL];
+            masif_ui_leds(&lb, &lk, &lg);
+            memset(nl, 0, sizeof nl);
+            for (c = 0; c < FM1_NCOL; c++)
+                for (r = 1; r < 5u; r++) {
+                    int32_t kid = FM1_KEYMAP[r][c];
+                    if (kid >= 0 && (kid < 14 ? (lb >> kid) & 1u : (lk >> (kid - 14)) & 1u)) nl[c] |= (uint8_t)(1u << r);
+                }
+            if (lg & 1u) nl[8] |= 1u << 1;   /* PLAY's green LED (column 8, line 1: no key of its own) */
+            memcpy(fm1_led, nl, sizeof nl);
+            memset(fm1_led_dim, 0, sizeof fm1_led_dim);
+        }
+        {
+            int32_t a = fm1_adc_read(FM1_ADC_MASTER);   /* the MASTER knob */
+            if (a >= 0) {
+                uint32_t k10;
+                knob_avg += (a * 16 - knob_avg) / 8;
+                k10 = (uint32_t)(knob_avg / 16);
+                master_q12 = (int32_t)((k10 * k10) >> 8);
+            }
+        }
+        fx_bpm10 = sq.bpm10;                            /* the delay follows the tempo */
+        if (ui.force) {                                 /* (the updater or the link drew over the screen) */
+            ui.force = 0;
+            mu.all = 1;
+        }
+        if ((uint32_t)(fm1_ms - t_frame) >= 33u) {
+            t_frame = fm1_ms;
+            masif_ui_draw();
+        }
+    }
+}
+#endif
+
+static void zp12_main(void)
+{
+    uint32_t i, prev_notes = 0, t_frame = 0, seq_down = 0, seq_used = 0, t_sig = 0, t_change = 0, last_sig = 0, save_later = 0;
+    int32_t knob_avg = 512 * 16;
+    for (i = 0; i < KIT_NWAVE; i++) {
+        sp_wave[i].d = KIT_DATA + KIT_WAVE[i].off;
+        sp_wave[i].n = KIT_WAVE[i].n;
+        sp_wave[i].rate = 26040;
+    }
+    for (i = 0; i < SP_NSOUND; i++)
+        sp_sound[i] = KIT_PADS[i];
+    sq_init();
+    zu_load();                                          /* the own samples (before the pads that play them) */
+    ui.back = 1;                                        /* pages back after 12 s, unless a save says otherwise */
+#if !(MASIF_ENABLE_TRACKER && MASIF_UI)                 /* (MASIF's screens: a zp12 save's drum loops must not play along) */
+    if (zs_load())                                      /* what was left: sounds, mix, effects, segments, song */
+        zs_saved_sig = zs_sig();
+#endif
+#if MASIF_ENABLE_TRACKER
+    masif_fm1_init();
+#if MASIF_SONG_STORE
+    if (flash_ok) {
+        masif_fm1_store_init();
+#if !MASIF_DEMO_SONG
+        /* the song worked on when the power went (MASIF_UI keeps it); none, or damaged: song 1 */
+        int rc = MASIF_UI ? masif_store_load(&masif_song, MASIF_STORE_WORK) : MASIF_STORE_EMPTY, any = rc != MASIF_STORE_EMPTY;
+        if (rc != MASIF_STORE_OK) any |= masif_store_load(&masif_song, 0) != MASIF_STORE_EMPTY;
+        if (any)
+            masif_fm1_song_changed();
+#endif
+    }
+#endif
+#endif
+    ui_init();
+#if MASIF_ENABLE_TRACKER && MASIF_UI
+    ui.force = 0;
+    masif_main();                                       /* (no zp12 start animation, no zp12 pages: never back) */
+#endif
+    {   /* the start (sp_ui.c ui_splash): ~3 s, its drums played; a key or a button cuts it short */
+        uint32_t t0 = fm1_ms, t = 0, prev = 0, drawn = 0, k;
+        lcd_fill(0, 0, 240, 240, P_NAVY);
+        ui_splash(0);
+        while (t < SPLASH_MS && !fm1_in.notes && !fm1_in.buttons) {
+            fm1_service();
+            t = fm1_ms - t0;
+            for (k = 0; k < 4u; k++)                    /* the hits whose time came since the last pass */
+                if (SPLASH_HIT[k].t > prev && SPLASH_HIT[k].t <= t)
+                    SP_HIT(SPLASH_HIT[k].pad, SPLASH_HIT[k].vel, 0);
+            prev = t;
+            if (t - drawn >= 40u) { ui_splash(t); drawn = t; }
+        }
+        while (fm1_in.notes || fm1_in.buttons)          /* (the key that cut it short is not played) */
+            fm1_service();
+    }
+    ui.force = 1;
+    for (;;) {
+        uint32_t n = fm1_in.notes, down = n & ~prev_notes, rel, b;
+        fm1_service();
+        prev_notes = n;
+        {   /* SEL held: the faders 5-8; LFO held: ERASE (the pads held lose their hits as the playhead passes) */
+            uint32_t bt = fm1_in.buttons, er = 0, k;
+            ui.held = bt;                               /* (SAVE held + a black key: key_down) */
+            if ((bt >> B_LFO) & 1u)
+                for (k = 0; k < 27u; k++)
+                    if ((n >> k) & 1u) {
+                        uint32_t pd = ui.multi ? ui.sel : key_pad(k);
+                        if (pd < 32u) er |= 1u << pd;
+                    }
+            sq.erase = er;
+            {   /* FX held: white keys 1-4 punch in, the last one held wins (sp_punch.c) */
+                int32_t px = -1;
+                if ((bt >> B_FX) & 1u)
+                    for (k = 0; k < 27u; k++)
+                        if ((n >> k) & 1u && white_of(k) < PN_NFX) px = (int32_t)white_of(k);
+                pn.req = (int8_t)px;
+            }
+            for (i = 0; down; i++, down >>= 1)          /* the keys: pads (ui decides which) */
+                if (down & 1u)
+                    key_down(i, (bt >> B_LFO) & 1u);
+        }
+        b = fm1_input_edges(&rel);
+        b = ui_holds(fm1_in.buttons, b, rel);           /* REC held: CLEAR; SAVE tapped / held + a black key */
+        if (b & (1u << B_FX)) {                         /* FX down: a punch-in layer while held; tapped, the FX pages */
+            ui.fx_used = 0;
+            b &= ~(1u << B_FX);
+        }
+        if (rel & (1u << B_FX) && !ui.fx_used)
+            button(B_FX);
+        if (b & (1u << B_GLO)) {                        /* GLO down: mute / solo on the white keys while held; tapped, the GLO pages */
+            ui.glo_used = 0;
+            b &= ~(1u << B_GLO);
+        }
+        if (rel & (1u << B_GLO) && !ui.glo_used)
+            button(B_GLO);
+        if (b & (1u << B_SEQ)) {                        /* SEQ down: the step grid while held */
+            seq_down = fm1_ms;
+            seq_used = 0;
+            ui.steps = 1;
+            ui.force = 1;
+            b &= ~(1u << B_SEQ);
+        }
+        if (ui.steps && (b & ((1u << B_OCTDN) | (1u << B_OCTUP)) || down))
+            seq_used = 1;
+        for (i = 0; b; i++, b >>= 1)
+            if (b & 1u)
+                button(i);
+        if (rel & (1u << B_SEQ) && ui.steps) {          /* SEQ up: a short tap opens the SEQ pages */
+            ui.steps = 0;
+            ui.force = 1;
+            if ((uint32_t)(fm1_ms - seq_down) < 350u && !seq_used)
+                button(B_SEQ);
+        }
+        {   /* the LEDs: built aside, then swapped in (the scan never shows half of them) */
+            uint32_t lb, lk, lg, id, c, r;
+            uint8_t nl[FM1_NCOL], nd[FM1_NCOL];
+            ui_leds(&lb, &lk, &lg);
+            memset(nl, 0, sizeof nl);
+            memset(nd, 0, sizeof nd);
+            for (c = 0; c < FM1_NCOL; c++)
+                for (r = 1; r < 5u; r++) {
+                    int32_t kid = FM1_KEYMAP[r][c];
+                    if (kid < 0) continue;
+                    id = (uint32_t)kid;
+                    if (id < 14u ? (lb >> id) & 1u : (lk >> (id - 14u)) & 1u) nl[c] |= (uint8_t)(1u << r);
+                    if (id >= 14u && (lg >> (id - 14u)) & 1u) nd[c] |= (uint8_t)(1u << r);
+                }
+            memcpy(fm1_led, nl, sizeof nl);
+            memcpy(fm1_led_dim, nd, sizeof nd);
+        }
+        {   /* KNOB 1-4 (encoders 2..5), SELECT (0): tempo, ALGORITHM (1): the pad, PRESETS (6): its sample */
+            int32_t d;
+            for (i = 0; i < 4u; i++)
+                if ((d = fm1_enc_take(2u + i)) != 0)
+                    knob(i, d);
+            if ((d = fm1_enc_take(0)) != 0)
+                sq.bpm10 = (uint16_t)sp_clamp((int32_t)sq.bpm10 + d * 5, 400, 2400);
+            if ((d = fm1_enc_take(1)) != 0)
+                ui.sel = (uint8_t)((ui.sel + SP_NSOUND + (d > 0 ? 1 : SP_NSOUND - 1)) % SP_NSOUND);
+            if ((d = fm1_enc_take(6)) != 0)
+                ui_preset(d);
+        }
+        while (mi_r != mi_w) {                          /* USB MIDI in: notes 36..67 play the 32 pads */
+            uint32_t pk = midi_in_q[mi_r % MQ], st = (pk >> 8) & 0xF0u, nt = (pk >> 16) & 0x7Fu, vel = pk >> 24 & 0x7Fu;
+            mi_r++;
+            if (st == 0x90u && vel && nt >= 36u && nt < 68u)
+                pad_hit(nt - 36u, vel);
+        }
+        {
+            int32_t a = fm1_adc_read(FM1_ADC_MASTER);   /* the MASTER knob */
+            if (a >= 0) {
+                uint32_t k10;
+                knob_avg += (a * 16 - knob_avg) / 8;
+                k10 = (uint32_t)(knob_avg / 16);
+                master_q12 = (int32_t)((k10 * k10) >> 8);
+            }
+        }
+        fx_bpm10 = sq.bpm10;                            /* the delay follows the tempo */
+        if ((uint32_t)(fm1_ms - t_frame) >= 16u) {
+            t_frame = fm1_ms;
+            ui_draw();
+        }
+        if (ui.factory_req) {                           /* SETUP > FACTORY: the kit's pads, mix, effects, no loops, no songs */
+            ui.factory_req = 0;
+            ui.back = 1;
+            sp_smooth = 1;
+            for (i = 0; i < SP_NSOUND; i++) sp_sound[i] = KIT_PADS[i];
+            for (i = 0; i < SP_NCH; i++) ui.mix[i] = sp_mix[i] = 100;
+            fxp.crate = 40; fxp.cdepth = 60; fxp.cmix = 127; fxp.dtime = 1; fxp.fdbk = 60; fxp.colr = 70; fxp.dmix = 90;
+            fxp.size = 90; fxp.damp = 60; fxp.pre = 0;
+            sq_init();
+            memset(sq_songs, 0, sizeof sq_songs);
+            memset(sq_song_len, 0, sizeof sq_song_len);
+            sq.seg = 0; sq.song_mode = 0; sq.song_sel = 0; sq.swing = 0; sq.quant = 3; sq.bpm10 = 900;
+            sq.click = 1; sq.cin_bars = 1; sq.dub_bar = 0; sp_mute = sp_solo = 0;
+            ui.save_req = 1;
+            ui.force = 1;
+            ui_say("FACTORY RESET");
+        }
+        {   /* saving: SAVE, or by itself when stopped, silent and nothing changed for 3 s (an erase stops the audio) */
+            uint32_t k, quiet = !sq.playing && !zl_busy();   /* (not while a backup is read or restored) */
+            for (k = 0; k < SP_NVOICE; k++) quiet &= !sp_ch[k].on;   /* (the tracker's voices too) */
+            if (fm1_ms - t_sig >= 500u) {
+                uint32_t sg = zs_sig();
+                t_sig = fm1_ms;
+                if (sg != last_sig) { last_sig = sg; t_change = fm1_ms; }
+            }
+            if (ui.save_req && !quiet && sq.playing) {
+                ui.save_req = 0;
+                save_later = 1;
+                ui_say("SAVES AT STOP");
+            }
+            if ((ui.save_req || save_later || (last_sig != zs_saved_sig && fm1_ms - t_change > 3000u)) && quiet) {
+                ui.save_req = 0;
+                save_later = 0;
+                if (zs_save())
+                    ui_say("SAVE ERROR");
+                last_sig = zs_saved_sig;
+            }
+        }
+    }
+}
+
+void fm1_cstart(void)
+{
+    extern uint32_t _data_start[], _data_end[], _data_load[], _bss_start[], _bss_end[];
+    extern uint32_t _pool_start[], _pool_end[], _rt_start[], _rt_end[], _rt_load[];
+    uint32_t *s, *d, p3, boot_mode;
+    fm1_time_init();
+    fm1_reset_reason();
+    p3 = fm1_boot.p3_rst;
+    fm1_wdt_arm(0x0D);
+    if ((p3 & 1u) && !(p3 & (4u | 0x40u)))
+        bootguard_clear(&bootguard);
+    boot_mode = bootguard_begin(&bootguard);
+    if (boot_mode == BOOT_ROM)
+        fm1_enter_uboot();
+    fm1_irq_init();
+    for (d = _bss_start; d < _bss_end; d++) *d = 0;
+    for (d = _pool_start; d < _pool_end; d++) *d = 0;
+    for (s = _data_load, d = _data_start; d < _data_end; s++, d++) *d = *s;
+    for (s = _rt_load, d = _rt_start; d < _rt_end; s++, d++) *d = *s;
+    fm1_mailbox_clear();
+    fm1_guard_enable(FM1_GUARD_STACK | FM1_GUARD_WRITE | FM1_GUARD_BUS | FM1_GUARD_PC);
+    fm1_boot.p3_rst = (uint8_t)p3;
+    if (boot_mode == BOOT_RECOVERY || recovery_key())
+        recovery_main();                        /* OCT- at power-on: the USB rescue */
+#if MASIF_ENABLE_TRACKER && MASIF_UI
+    boot_keys = fm1_in.buttons;                 /* (what recovery_key saw: the project page shows it) */
+#endif
+    flash_ok = FL_FAR(fl_jedec_ram)() == 0x856014u;
+#if MASIF_APP_ROOM
+    if (flash_ok) {                             /* the plain window from the first whole sector past the image: the */
+        extern const uint8_t _app_end[];        /* app area's free part is sample room as the data flash is */
+        uint32_t lo = ((uint32_t)_app_end - FL_XIP(0u) + 0xFFFu) & ~0xFFFu;
+        if (lo > 0x4000u && lo + 0x2000u <= MASIF_APP_HI) {
+            fl_plain_window_from(lo);
+            masif_app_lo = lo;
+        } else {
+            fl_plain_window_init();
+        }
+    }
+#else
+    if (flash_ok)
+        fl_plain_window_init();                 /* flash above 0x93000 reads plain through XIP: the own samples */
+#endif
+    ota_boot_cleanup();
+    lcd_init();
+    lcd_fill(0, 0, 240, 240, C_BLACK);
+    fm1_input_init();
+    fm1_adc_init();
+    fm1_audio_init(abuf, HALF_WORDS, isr_alnk0, 3);   /* (abuf is zero: .bss) */
+    usb_start();
+    fm1_timer5_start(isr_timer5, 4);
+    fm1_guard_lock_top();
+    fm1_irq_enable_all();
+    zp12_main();
+    for (;;)
+        fm1_service();
+}
